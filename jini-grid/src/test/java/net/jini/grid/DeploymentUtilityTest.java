@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import net.jini.space.JavaSpace;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -195,6 +196,57 @@ public class DeploymentUtilityTest {
 
             // Cleanup
             foundDsm.undeploy("test-unit");
+        } finally {
+            new java.io.File(jarPath).delete();
+        }
+    }
+
+    @Test
+    public void testEmbeddedSpaceDeployment() throws Exception {
+        String puXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                "<beans xmlns=\"http://www.springframework.org/schema/beans\"\n" +
+                "       xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                "       xmlns:os-core=\"http://www.openspaces.org/schema/core\"\n" +
+                "       xsi:schemaLocation=\"http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd\n" +
+                "                           http://www.openspaces.org/schema/core http://www.openspaces.org/schema/core/openspaces-core.xsd\">\n" +
+                "    <os-core:space id=\"space\" />\n" +
+                "</beans>";
+
+        String slaXml = "<sla xmlns=\"http://www.openspaces.org/schema/sla\" \n" +
+                "     cluster-schema=\"default\" \n" +
+                "     number-of-instances=\"1\">\n" +
+                "</sla>";
+
+        String jarPath = "embedded-space-unit.jar";
+        createJar(jarPath, puXml, slaXml);
+
+        try {
+            // 1. Start components
+            startDSCs(1);
+
+            // 2. Load ServiceUnit
+            ServiceUnit unit = ServiceUnitLoader.load(new java.io.File(jarPath));
+            assertTrue(unit.hasEmbeddedSpace());
+
+            // 3. Find DSM and deploy
+            DistributedServiceManager foundDsm = findDSM();
+            foundDsm.deploy(unit);
+
+            // 4. Verify in LUS
+            LookupLocator locator = new LookupLocator("localhost", 1099);
+            ServiceRegistrar registrar = locator.getRegistrar();
+            ServiceTemplate tmpl = new ServiceTemplate(null, new Class[]{JavaSpace.class}, null);
+
+            ServiceMatches matches = registrar.lookup(tmpl, 1);
+            if (matches.totalMatches == 0) {
+                // Wait a bit and try again as registration is asynchronous in the simulation
+                Thread.sleep(1000);
+                matches = registrar.lookup(tmpl, 1);
+            }
+            assertEquals(1, matches.totalMatches, "Embedded space should be registered in LUS");
+
+            // Cleanup
+            foundDsm.undeploy("embedded-space-unit");
         } finally {
             new java.io.File(jarPath).delete();
         }

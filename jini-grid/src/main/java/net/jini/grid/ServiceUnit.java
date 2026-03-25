@@ -9,6 +9,7 @@ public class ServiceUnit implements Serializable {
     private final List<Object> services;
     private final SLA sla;
     private final boolean embeddedSpace;
+    private String spaceUrl;
 
     public ServiceUnit(String name, List<Object> services) {
         this(name, services, new SLA(), false);
@@ -39,5 +40,13 @@ public class ServiceUnit implements Serializable {
 
     public boolean hasEmbeddedSpace() {
         return embeddedSpace;
+    }
+
+    public String getSpaceUrl() {
+        return spaceUrl;
+    }
+
+    public void setSpaceUrl(String spaceUrl) {
+        this.spaceUrl = spaceUrl;
     }
 }

@@ -42,9 +42,12 @@ public class ServiceUnitLoader {
         }
 
         List<Object> services = new ArrayList<>();
-        boolean embeddedSpace = parsePuXml(puXml, services);
+        String[] spaceUrl = new String[1];
+        boolean embeddedSpace = parsePuXml(puXml, services, spaceUrl);
 
-        return new ServiceUnit(name, services, sla, embeddedSpace);
+        ServiceUnit unit = new ServiceUnit(name, services, sla, embeddedSpace);
+        unit.setSpaceUrl(spaceUrl[0]);
+        return unit;
     }
 
     private static ServiceUnit loadFromJar(File jarFile, String name) throws Exception {
@@ -57,12 +60,15 @@ public class ServiceUnitLoader {
             }
 
             List<Object> services = new ArrayList<>();
+            String[] spaceUrl = new String[1];
             boolean embeddedSpace;
             try (InputStream is = jar.getInputStream(puXmlEntry)) {
-                embeddedSpace = parsePuXmlFromStream(is, services);
+                embeddedSpace = parsePuXmlFromStream(is, services, spaceUrl);
             }
 
-            return new ServiceUnit(name, services, sla, embeddedSpace);
+            ServiceUnit unit = new ServiceUnit(name, services, sla, embeddedSpace);
+            unit.setSpaceUrl(spaceUrl[0]);
+            return unit;
         }
     }
 
@@ -107,7 +113,7 @@ public class ServiceUnitLoader {
         return sla;
     }
 
-    private static boolean parsePuXmlFromStream(InputStream is, List<Object> services) throws Exception {
+    private static boolean parsePuXmlFromStream(InputStream is, List<Object> services, String[] spaceUrl) throws Exception {
         DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
         dbFactory.setNamespaceAware(true);
         DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
@@ -116,10 +122,32 @@ public class ServiceUnitLoader {
 
         boolean embeddedSpace = false;
 
-        // Simulate finding <os-core:space id="space" />
+        // Simulate finding <os-core:space id="space" url="/./space" />
         NodeList spaceList = doc.getElementsByTagNameNS("http://www.openspaces.org/schema/core", "space");
         if (spaceList.getLength() > 0) {
             embeddedSpace = true;
+            Element spaceElem = (Element) spaceList.item(0);
+            if (spaceElem.hasAttribute("url")) {
+                spaceUrl[0] = spaceElem.getAttribute("url");
+            }
+        }
+
+        // Handle EmbeddedSpaceFactoryBean
+        NodeList beanList = doc.getElementsByTagName("bean");
+        for (int i = 0; i < beanList.getLength(); i++) {
+            Element bean = (Element) beanList.item(i);
+            String className = bean.getAttribute("class");
+            if ("net.jini.space.EmbeddedSpaceFactoryBean".equals(className)) {
+                embeddedSpace = true;
+                // Try to find name property
+                NodeList props = bean.getElementsByTagName("property");
+                for (int j = 0; j < props.getLength(); j++) {
+                    Element prop = (Element) props.item(j);
+                    if ("name".equals(prop.getAttribute("name"))) {
+                        spaceUrl[0] = "/./" + prop.getAttribute("value");
+                    }
+                }
+            }
         }
 
         // Simulate finding <bean class="..." />
@@ -155,9 +183,9 @@ public class ServiceUnitLoader {
         return new SLA();
     }
 
-    private static boolean parsePuXml(File puXml, List<Object> services) throws Exception {
+    private static boolean parsePuXml(File puXml, List<Object> services, String[] spaceUrl) throws Exception {
         try (InputStream is = new java.io.FileInputStream(puXml)) {
-            return parsePuXmlFromStream(is, services);
+            return parsePuXmlFromStream(is, services, spaceUrl);
         }
     }
 }

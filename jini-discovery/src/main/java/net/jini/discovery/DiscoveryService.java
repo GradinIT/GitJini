@@ -96,7 +96,8 @@ public class DiscoveryService {
                         }
                         oos.flush();
                     } catch (Exception e) {
-                        if (!serverSocket.isClosed()) {
+                        ServerSocket ssForCheck = serverSocket;
+                        if (ssForCheck != null && !ssForCheck.isClosed()) {
                             // Silence common socket reset errors during shutdown
                         }
                     }

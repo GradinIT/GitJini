@@ -3,6 +3,7 @@ package net.jini.grid;
 import net.jini.core.export.ExportedService;
 import net.jini.core.lookup.ServiceRegistration;
 import net.jini.export.ServiceExporter;
+import java.lang.reflect.Method;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,14 +26,17 @@ public class DistributedServiceContainerImpl implements DistributedServiceContai
             System.out.println("[DSC] Starting embedded space for unit: " + unit.getName());
             try {
                 // Avoid compile-time dependency on jini-java-spaces; instantiate via reflection if available
-                Class<?> spaceClass = Class.forName("net.jini.space.BasicJavaSpace");
-                Object space = spaceClass.getDeclaredConstructor().newInstance();
+                Class<?> finderClass = Class.forName("net.jini.space.SpaceFinder");
+                Method findMethod = finderClass.getMethod("find", String.class);
+                String url = unit.getSpaceUrl();
+                if (url == null) url = "/./" + unit.getName();
+                Object space = findMethod.invoke(null, url);
                 ServiceRegistration reg = ServiceExporter.exportIfNeeded(space);
                 if (reg != null) {
                     registrations.add(reg);
                 }
             } catch (ClassNotFoundException cnfe) {
-                System.err.println("[DSC] BasicJavaSpace not found on classpath; embedded space will not be started.");
+                System.err.println("[DSC] SpaceFinder not found on classpath; embedded space will not be started.");
             } catch (Exception e) {
                 throw new RemoteException("Failed to export embedded space in ServiceUnit: " + unit.getName(), e);
             }

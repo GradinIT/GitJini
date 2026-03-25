@@ -23,48 +23,60 @@ public class ServiceExporter {
      */
     public static ServiceRegistration exportIfNeeded(Object service) throws Exception {
         Class<?> serviceClass = service.getClass();
-        if (serviceClass.isAnnotationPresent(ExportedService.class)) {
-            ExportedService annotation = serviceClass.getAnnotation(ExportedService.class);
-            
-            String host = System.getProperty("lus.host", "localhost");
-            int port = Integer.getInteger("lus.port", 1099);
-            
-            System.out.println("[EXPORTER] Exporting service " + serviceClass.getName());
-            
-            LookupLocator locator = new LookupLocator(host, port);
-            ServiceRegistrar registrar = locator.getRegistrar();
-            
-            if (registrar == null) {
-                throw new IllegalStateException("Could not find Lookup Service at " + host + ":" + port);
+        ExportedService annotation = serviceClass.getAnnotation(ExportedService.class);
+        
+        // If not annotated, we still export it if it's a known service type (like JavaSpace)
+        boolean isSpace = false;
+        try {
+            Class<?> spaceInterface = Class.forName("net.jini.space.JavaSpace");
+            if (spaceInterface.isInstance(service)) {
+                isSpace = true;
             }
-            
-            ServiceID serviceID;
-            String instanceId = annotation.instanceId();
-            if (annotation.id().isEmpty()) {
-                serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
-            } else {
-                String compositeId = annotation.id();
-                if (!instanceId.isEmpty()) {
-                    compositeId += ":" + instanceId;
-                    UUID uuid = UUID.nameUUIDFromBytes(compositeId.getBytes());
-                    serviceID = new ServiceID(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                } else {
-                    // Let LUS generate ServiceID or use random to avoid collisions
-                    serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
-                }
-            }
-            
-            List<Entry> attributes = new ArrayList<>();
-            // Always add a RoutingEntry, use the instanceId from @ExportedService if present
-            attributes.add(new RoutingEntry(instanceId.isEmpty() ? null : instanceId));
-            
-            ServiceItem item = new ServiceItem(serviceID, service, attributes.toArray(new Entry[0]));
-            
-            // Register for 5 minutes by default
-            ServiceRegistration reg = registrar.register(item, 1000 * 60 * 5);
-            System.out.println("[EXPORTER] Service registered with ID: " + reg.getServiceID());
-            return reg;
+        } catch (ClassNotFoundException ignored) {}
+
+        if (annotation == null && !isSpace) {
+            return null;
         }
-        return null;
+        
+        String host = System.getProperty("lus.host", "localhost");
+        int port = Integer.getInteger("lus.port", 1099);
+        
+        System.out.println("[EXPORTER] Exporting service " + serviceClass.getName());
+        
+        LookupLocator locator = new LookupLocator(host, port);
+        ServiceRegistrar registrar = locator.getRegistrar();
+        
+        if (registrar == null) {
+            throw new IllegalStateException("Could not find Lookup Service at " + host + ":" + port);
+        }
+        
+        ServiceID serviceID;
+        String instanceId = annotation != null ? annotation.instanceId() : "";
+        String id = annotation != null ? annotation.id() : "";
+
+        if (id.isEmpty()) {
+            serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
+        } else {
+            String compositeId = id;
+            if (!instanceId.isEmpty()) {
+                compositeId += ":" + instanceId;
+                UUID uuid = UUID.nameUUIDFromBytes(compositeId.getBytes());
+                serviceID = new ServiceID(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+            } else {
+                // Let LUS generate ServiceID or use random to avoid collisions
+                serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
+            }
+        }
+        
+        List<Entry> attributes = new ArrayList<>();
+        // Always add a RoutingEntry, use the instanceId from @ExportedService if present
+        attributes.add(new RoutingEntry(instanceId.isEmpty() ? null : instanceId));
+        
+        ServiceItem item = new ServiceItem(serviceID, service, attributes.toArray(new Entry[0]));
+        
+        // Register for 5 minutes by default
+        ServiceRegistration reg = registrar.register(item, 1000 * 60 * 5);
+        System.out.println("[EXPORTER] Service registered with ID: " + reg.getServiceID());
+        return reg;
     }
 }
