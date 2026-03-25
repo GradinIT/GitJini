@@ -27,6 +27,11 @@
             <artifactId>jini-discovery</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-java-spaces</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
 </project>

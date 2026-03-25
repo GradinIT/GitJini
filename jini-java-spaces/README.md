@@ -15,16 +15,18 @@ Lightweight JavaSpaces module for GitJini. It provides the core `JavaSpace` API 
   - `notify(...)`
   - `snapshot(Entry)`
 - Extended API `net.jini.space.JavaSpace05` with:
-  - `write(Collection entries, Transaction, Collection leaseDurations)`
+  - `write(List entries, Transaction, List leaseDurations)`
   - `take(Collection templates, Transaction, long timeout, long maxEntries)`
+  - `contents(Collection templates, Transaction, long leaseDuration, long maxEntries)`
   - `registerForAvailabilityEvent(...)`
 - In‑memory implementation: `net.jini.space.BasicJavaSpace`
+- `MatchSet` interface for exhaustive reading of entries
 - Transaction support (visibility, locks, commit/abort)
 - Event notifications per Jini Distributed Events spec
 - Field‑based matching per spec semantics (exact value match or wildcard for null fields)
 - Lease handling: duration accepted, tracked, and renewable
 - Pluggable persistence: `PersistenceStore` interface for custom backends
-- `InternalSpaceException` for reporting internal space errors
+- `InternalSpaceException` and `UnusableEntriesException` for error reporting
 
 ## Getting Started
 
@@ -86,9 +88,11 @@ Notes:
 ## Module Layout
 - `src/main/java/net/jini/space/JavaSpace.java` — API
 - `src/main/java/net/jini/space/JavaSpace05.java` — Extended API (batch ops, availability events)
-- `src/main/java/net/jini/space/BasicJavaSpace.java` — In‑memory implementation with transaction and event support
+- `src/main/java/net/jini/space/BasicJavaSpace.java` — In‑memory implementation with transaction, event, and `MatchSet` support
 - `src/main/java/net/jini/space/InternalSpaceException.java` — internal error type
-- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — Comprehensive usage tests including transactions and events
+- `src/main/java/net/jini/space/MatchSet.java` — interface for batch read results
+- `src/main/java/net/jini/entry/UnusableEntriesException.java` — error type for batch operations
+- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — Comprehensive usage tests including transactions, events, and batch operations
 - `specification.md` — extracted JavaSpaces Service Specification (text version)
 
 ## Specification
@@ -107,6 +111,7 @@ Planned improvements:
 - Multi‑JVM transaction coordination (distributed transaction manager support).
 - More robust `PersistenceStore` implementations (e.g., SQLite, JSON).
 - Enhanced Jini Discovery and Lookup integration.
+- Full `MatchSet` implementation with remote leasing and live updates.
 
 ## Build and Test
 From the project root:
