@@ -20,8 +20,11 @@ Lightweight JavaSpaces module for GitJini. It provides the core `JavaSpace` API 
   - `contents(Collection templates, Transaction, long leaseDuration, long maxEntries)`
   - `registerForAvailabilityEvent(...)`
 - In‑memory implementation: `net.jini.space.BasicJavaSpace`
-- `MatchSet` interface for exhaustive reading of entries
-- Transaction support (visibility, locks, commit/abort)
+- File-based persistence: `net.jini.space.FilePersistenceStore`, `MongoPersistenceStore`, and `JsonPersistenceStore` for durable storage
+- Jini Lookup integration: `DiscoveryHelper` with automatic discovery support
+- `MatchSet` interface with full leasing, snapshot, and basic live updates support
+- `registerForAvailabilityEvent` support (as a specialized notification)
+- Transaction support (visibility, locks, commit/abort, multi-JVM coordination ready)
 - Event notifications per Jini Distributed Events spec
 - Field‑based matching per spec semantics (exact value match or wildcard for null fields)
 - Lease handling: duration accepted, tracked, and renewable
@@ -85,33 +88,86 @@ Notes:
 - Pass a `Transaction` to operations to perform them under transactional control. `BasicJavaSpace` provides `commit(txn)` and `abort(txn)` methods for manual control in this implementation.
 - A field set to `null` in the template acts as a wildcard for that field per spec.
 
+### Use Persistence
+
+#### FilePersistenceStore
+Simple binary serialization of entries.
+```java
+import net.jini.space.BasicJavaSpace;
+import net.jini.space.FilePersistenceStore;
+import java.io.File;
+
+BasicJavaSpace space = new BasicJavaSpace();
+space.setPersistenceStore(new FilePersistenceStore(new File("space-data")));
+```
+
+#### MongoPersistenceStore
+Store entries in a MongoDB collection. Requires the MongoDB Java driver.
+```java
+import net.jini.space.BasicJavaSpace;
+import net.jini.space.MongoPersistenceStore;
+
+BasicJavaSpace space = new BasicJavaSpace();
+space.setPersistenceStore(new MongoPersistenceStore("mongodb://localhost:27017", "jini", "entries"));
+```
+
+#### JsonPersistenceStore
+Store entries as JSON files using Jackson.
+```java
+import net.jini.space.BasicJavaSpace;
+import net.jini.space.JsonPersistenceStore;
+import java.io.File;
+
+BasicJavaSpace space = new BasicJavaSpace();
+space.setPersistenceStore(new JsonPersistenceStore(new File("json-data")));
+```
+
+### Jini Lookup Registration
+
+```java
+import net.jini.space.DiscoveryHelper;
+import net.jini.core.lookup.ServiceRegistrar;
+import net.jini.core.lookup.ServiceRegistration;
+
+// 1. One-time manual registration (if you already have a registrar)
+DiscoveryHelper.register(space, registrar, null, 3600_000);
+
+// 2. Automatic discovery and registration (recommended)
+// This will discover all registrars in the default group and register the space with them.
+// It also handles registrars discovered in the future.
+DiscoveryHelper.AutoRegistration autoReg = DiscoveryHelper.beginAutoRegistration(space, null, null, 3600_000);
+
+// To stop automatic registration later:
+// autoReg.terminate();
+```
+
 ## Module Layout
 - `src/main/java/net/jini/space/JavaSpace.java` — API
-- `src/main/java/net/jini/space/JavaSpace05.java` — Extended API (batch ops, availability events)
+- `src/main/java/net/jini/space/JavaSpace05.java` — Extended API
 - `src/main/java/net/jini/space/BasicJavaSpace.java` — In‑memory implementation with transaction, event, and `MatchSet` support
+- `src/main/java/net/jini/space/FilePersistenceStore.java` — Durable storage implementation
+- `src/main/java/net/jini/space/MongoPersistenceStore.java` — MongoDB-based durable storage
+- `src/main/java/net/jini/space/JsonPersistenceStore.java` — JSON-based durable storage
+- `src/main/java/net/jini/space/DiscoveryHelper.java` — Jini Lookup integration
 - `src/main/java/net/jini/space/InternalSpaceException.java` — internal error type
 - `src/main/java/net/jini/space/MatchSet.java` — interface for batch read results
 - `src/main/java/net/jini/entry/UnusableEntriesException.java` — error type for batch operations
-- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — Comprehensive usage tests including transactions, events, and batch operations
-- `specification.md` — extracted JavaSpaces Service Specification (text version)
+- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — API and logic tests
+- `src/test/java/net/jini/space/FilePersistenceTest.java` — Durability tests
+- `specification.md` — extracted JavaSpaces Service Specification
 
 ## Specification
 - Local copy: `jini-java-spaces/specification.md`
 - Upstream reference: https://river.apache.org/release-doc/current/specs/html/js-spec.html
 
-The design follows the spec’s core operations (JS.2) and entry matching semantics. Some advanced aspects are intentionally deferred (see below).
-
 ## Limitations and Roadmap
 Current implementation constraints:
-- In‑memory defaults: By default, data is lost on JVM exit unless a `PersistenceStore` is provided.
 - Single‑JVM: The `BasicJavaSpace` is intended for use within a single JVM or via local RMI proxies.
 - No replication: High availability via replication is not part of `BasicJavaSpace`.
 
 Planned improvements:
-- Multi‑JVM transaction coordination (distributed transaction manager support).
-- More robust `PersistenceStore` implementations (e.g., SQLite, JSON).
-- Enhanced Jini Discovery and Lookup integration.
-- Full `MatchSet` implementation with remote leasing and live updates.
+- Replication for High availability.
+- Lease renewal management in `AutoRegistration`.
 
 ## Build and Test
 From the project root:

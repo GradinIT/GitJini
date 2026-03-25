@@ -36,15 +36,19 @@ public class BasicJavaSpace implements JavaSpace05 {
     private final List<SpaceEntry> entries = new CopyOnWriteArrayList<>();
     private final List<Registration> notifications = new CopyOnWriteArrayList<>();
     private final Map<Transaction, TransactionState> transactions = new ConcurrentHashMap<>();
+
     public interface PersistenceStore {
         void write(UUID id, Entry entry, long expiration);
         void remove(UUID id);
         Map<UUID, StoredEntry> loadAll();
     }
 
-    public static class StoredEntry {
-        public final Entry entry;
-        public final long expiration;
+    public static class StoredEntry implements Serializable {
+        private static final long serialVersionUID = 1L;
+        public Entry entry;
+        public long expiration;
+
+        public StoredEntry() {}
 
         public StoredEntry(Entry entry, long expiration) {
             this.entry = entry;
@@ -55,14 +59,23 @@ public class BasicJavaSpace implements JavaSpace05 {
     private PersistenceStore store;
     private long eventSequence = 0;
 
+    public static class TestEntry implements net.jini.core.entry.Entry {
+        public String name;
+        public Integer value;
+
+        public TestEntry() {}
+        public TestEntry(String name, Integer value) {
+            this.name = name;
+            this.value = value;
+        }
+    }
+
     public void setPersistenceStore(PersistenceStore store) {
         this.store = store;
         if (store != null) {
             Map<UUID, StoredEntry> loaded = store.loadAll();
             for (Map.Entry<UUID, StoredEntry> e : loaded.entrySet()) {
-                SpaceEntry se = new SpaceEntry(e.getValue().entry, e.getValue().expiration);
-                // We should ideally preserve the UUID but SpaceEntry generates a new one.
-                // For this basic impl it's fine.
+                SpaceEntry se = new SpaceEntry(e.getValue().entry, e.getValue().expiration, e.getKey());
                 entries.add(se);
             }
         }
@@ -75,9 +88,13 @@ public class BasicJavaSpace implements JavaSpace05 {
         Transaction lock;
 
         SpaceEntry(Entry entry, long expiration) {
+            this(entry, expiration, UUID.randomUUID());
+        }
+
+        SpaceEntry(Entry entry, long expiration, UUID id) {
             this.entry = entry;
             this.expiration = expiration;
-            this.id = UUID.randomUUID();
+            this.id = id;
         }
 
         boolean isExpired() {
@@ -126,7 +143,9 @@ public class BasicJavaSpace implements JavaSpace05 {
             checkNotifications(e);
         } else {
             TransactionState state = transactions.computeIfAbsent(txn, k -> new TransactionState());
-            state.writes.add(se);
+            synchronized (state) {
+                state.writes.add(se);
+            }
             se.lock = txn;
         }
         
@@ -147,7 +166,7 @@ public class BasicJavaSpace implements JavaSpace05 {
                 try {
                     reg.listener.notify(new RemoteEvent(this, reg.eventID, seq, (Serializable) reg.handback));
                 } catch (Exception ex) {
-                    // Ignore or log
+                    System.err.println("[DEBUG_LOG] Notification failed: " + ex.getMessage());
                 }
             }
         }
@@ -188,11 +207,13 @@ public class BasicJavaSpace implements JavaSpace05 {
             // Check entries in the space
             for (SpaceEntry se : entries) {
                 if (se.isExpired()) {
-                    entries.remove(se);
+                    if (entries.remove(se)) {
+                        if (store != null) store.remove(se.id);
+                    }
                     continue;
                 }
                 if (matches(tmpl, se.entry)) {
-                    if (se.lock != null && se.lock != txn) {
+                    if (se.lock != null && !se.lock.equals(txn)) {
                         continue; // Locked by another transaction
                     }
                     if (remove) {
@@ -204,7 +225,9 @@ public class BasicJavaSpace implements JavaSpace05 {
                         } else {
                             if (entries.remove(se)) {
                                 TransactionState state = transactions.computeIfAbsent(txn, k -> new TransactionState());
-                                state.takes.add(se);
+                                synchronized (state) {
+                                    state.takes.add(se);
+                                }
                                 se.lock = txn;
                                 return se.entry;
                             }
@@ -219,13 +242,16 @@ public class BasicJavaSpace implements JavaSpace05 {
             if (txn != null) {
                 TransactionState state = transactions.get(txn);
                 if (state != null) {
-                    for (SpaceEntry se : state.writes) {
-                        if (matches(tmpl, se.entry)) {
-                            if (remove) {
-                                state.writes.remove(se);
-                                return se.entry;
-                            } else {
-                                return se.entry;
+                    synchronized (state) {
+                        for (Iterator<SpaceEntry> it = state.writes.iterator(); it.hasNext(); ) {
+                            SpaceEntry se = it.next();
+                            if (matches(tmpl, se.entry)) {
+                                if (remove) {
+                                    it.remove();
+                                    return se.entry;
+                                } else {
+                                    return se.entry;
+                                }
                             }
                         }
                     }
@@ -366,45 +392,97 @@ public class BasicJavaSpace implements JavaSpace05 {
     public MatchSet contents(Collection templates, Transaction txn, long leaseDuration, long maxEntries)
             throws TransactionException, RemoteException {
         if (templates == null) throw new NullPointerException("templates is null");
-        List matches = new ArrayList();
-        for (SpaceEntry se : entries) {
-            if (se.isExpired()) continue;
-            for (Object t : templates) {
-                if (matches((Entry) t, se.entry)) {
-                    matches.add(se.entry);
-                    break;
-                }
-            }
-        }
-        return new BasicMatchSet(matches);
+        long expiration = System.currentTimeMillis() + (leaseDuration > 0 ? leaseDuration : 3600000);
+        return new BasicMatchSet(templates, txn, maxEntries, expiration, this);
     }
 
     private static class BasicMatchSet implements MatchSet {
-        private final List entries;
+        private final Collection templates;
+        private final Transaction txn;
+        private final long maxEntries;
+        private final List matches = new ArrayList();
         private int index = 0;
         private Entry last;
+        private volatile long expiration;
+        private final BasicJavaSpace space;
+        private final List seenIds = new ArrayList();
 
-        BasicMatchSet(List entries) {
-            this.entries = entries;
+        BasicMatchSet(Collection templates, Transaction txn, long maxEntries, long expiration, BasicJavaSpace space) {
+            this.templates = templates;
+            this.txn = txn;
+            this.maxEntries = maxEntries;
+            this.expiration = expiration;
+            this.space = space;
         }
 
         @Override
         public Entry next() {
-            if (index < entries.size()) {
-                last = (Entry) entries.get(index++);
+            if (System.currentTimeMillis() > expiration) return null;
+            
+            // Return cached matches if available
+            if (index < matches.size()) {
+                last = (Entry) matches.get(index++);
                 return last;
             }
+            
+            // Try to find more matching entries if maxEntries not exceeded
+            if (maxEntries > 0 && seenIds.size() >= maxEntries) return null;
+            
+            // Search in space for matching entries that haven't been seen yet
+            for (SpaceEntry se : space.entries) {
+                if (se.isExpired()) continue;
+                if (seenIds.contains(se.id)) continue;
+                
+                // Visibility/Lock check
+                if (txn != null && se.lock != null && !se.lock.equals(txn)) continue;
+                if (txn == null && se.lock != null) continue;
+                
+                for (Object t : templates) {
+                    if (space.matches((Entry) t, se.entry)) {
+                        seenIds.add(se.id);
+                        matches.add(se.entry);
+                        last = se.entry;
+                        index = matches.size(); // Keep index at current matches size
+                        return last;
+                    }
+                }
+            }
+            
             return null;
         }
 
         @Override
         public Lease getLease() {
-            return null; // Simplified for now
+            return new MatchSetLease(this);
         }
 
         @Override
         public Entry getSnapshot() {
             return last;
+        }
+    }
+
+    private static class MatchSetLease implements Lease {
+        private final BasicMatchSet matchSet;
+
+        MatchSetLease(BasicMatchSet matchSet) {
+            this.matchSet = matchSet;
+        }
+
+        @Override
+        public long getExpiration() {
+            return matchSet.expiration;
+        }
+
+        @Override
+        public void renew(long duration) throws LeaseException, UnknownLeaseException {
+            if (matchSet.expiration == 0) throw new UnknownLeaseException("Lease cancelled");
+            matchSet.expiration = System.currentTimeMillis() + duration;
+        }
+
+        @Override
+        public void cancel() throws UnknownLeaseException {
+            matchSet.expiration = 0;
         }
     }
 
