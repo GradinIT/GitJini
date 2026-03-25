@@ -1,5 +1,6 @@
 package net.jini.example;
 
+import net.jini.core.discovery.LookupLocator;
 import net.jini.core.lookup.*;
 import net.jini.lookup.BasicLookupService;
 import net.jini.core.entry.Entry;
@@ -13,9 +14,82 @@ import java.util.UUID;
 
 public class JiniExampleApp {
 
+    public void startLUS() {
+        try {
+            System.out.println("--- Jini Lookup Service (LUS) Starting ---");
+            ServiceRegistrar registrar = new BasicLookupService();
+            
+            String lusHost = System.getProperty("lus.host", "0.0.0.0");
+            int lusPort = Integer.getInteger("lus.port", 1099);
+            
+            System.out.println("[LUS] Starting at " + lusHost + ":" + lusPort);
+            DiscoveryService.register(lusHost, lusPort, registrar);
+            
+            // Keep the process alive
+            System.out.println("[LUS] Ready and waiting...");
+            Thread.currentThread().join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void startService() {
+        try {
+            System.out.println("--- Jini Service Starting ---");
+            
+            String lusHost = System.getProperty("lus.host", "localhost");
+            int lusPort = Integer.getInteger("lus.port", 1099);
+            System.out.println("[SERVICE] Connecting to LUS at " + lusHost + ":" + lusPort);
+
+            // Create service instance
+            HelloService helloService = new HelloServiceImpl("Docker-Instance");
+
+            // Register service
+            ServiceRegistration reg = ServiceExporter.exportIfNeeded(helloService);
+            
+            if (reg != null) {
+                System.out.println("[SERVICE] Registered successfully with ID: " + reg.getServiceID());
+            }
+
+            // Keep alive
+            System.out.println("[SERVICE] Ready.");
+            Thread.currentThread().join();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void startClient() {
+        try {
+            System.out.println("--- Jini Client Starting ---");
+            
+            String lusHost = System.getProperty("lus.host", "localhost");
+            int lusPort = Integer.getInteger("lus.port", 1099);
+            
+            System.out.println("[CLIENT] Connecting to LUS at " + lusHost + ":" + lusPort);
+            LookupLocator locator = new LookupLocator(lusHost, lusPort);
+            ServiceRegistrar registrar = locator.getRegistrar();
+            
+            if (registrar == null) {
+                System.err.println("[CLIENT] Could not find LUS!");
+                return;
+            }
+
+            HelloClient helloClient = new HelloClient();
+            ServiceImporter.importServices(helloClient, registrar);
+
+            System.out.println("[CLIENT] Calling service...");
+            String response = helloClient.callHello("DockerKey", "DockerUser");
+            System.out.println("[CLIENT] Response: " + response);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void run() {
         try {
-            System.out.println("--- Jini Example Started ---");
+            System.out.println("--- Jini Example Started (Monolithic Mode) ---");
 
             // 1. Start the Lookup Service (LUS)
             System.out.println("[LUS] Starting BasicLookupService...");
@@ -31,7 +105,7 @@ public class JiniExampleApp {
             // 2. Prepare multiple services to be registered
             System.out.println("[SERVICE] Creating two HelloService implementations...");
             HelloService helloService1 = new HelloServiceImpl("Instance-1");
-            HelloService helloService2 = new HelloServiceInstance2("Instance-2");
+            HelloService helloService2 = new HelloServiceImpl("Instance-2");
 
             // 3. Register the services with the LUS using the Exporter
             System.out.println("[SERVICE] Attempting automatic registration via @ExportedService...");
@@ -66,7 +140,37 @@ public class JiniExampleApp {
         }
     }
 
+    private static void checkDocker() {
+        boolean inDocker = new java.io.File("/.dockerenv").exists();
+        if (!inDocker) {
+            System.err.println("CRITICAL: This application is configured to run ONLY in a Docker container.");
+            System.err.println("Please use 'docker-compose up' to start the environment.");
+            System.exit(1);
+        }
+        System.out.println("[DOCKER] Running in a Docker container.");
+    }
+
     public static void main(String[] args) {
-        new JiniExampleApp().run();
+        if (args.length > 0) {
+            checkDocker();
+            String command = args[0].toLowerCase();
+            JiniExampleApp app = new JiniExampleApp();
+            switch (command) {
+                case "lus":
+                    app.startLUS();
+                    break;
+                case "service":
+                    app.startService();
+                    break;
+                case "client":
+                    app.startClient();
+                    break;
+                default:
+                    System.out.println("Unknown command: " + command);
+                    System.out.println("Usage: java -jar jini-example.jar [lus|service|client]");
+            }
+        } else {
+            new JiniExampleApp().run();
+        }
     }
 }

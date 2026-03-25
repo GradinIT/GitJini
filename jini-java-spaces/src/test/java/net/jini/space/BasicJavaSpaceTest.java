@@ -47,6 +47,7 @@ public class BasicJavaSpaceTest {
         @Override public Object[] getFieldValues(ServiceTemplate tmpl, int setIndex, String field) throws NoSuchFieldException, RemoteException { return null; }
         @Override public Class[] getServiceTypes(ServiceTemplate tmpl, String prefix) throws RemoteException { return null; }
         @Override public ServiceID getServiceID() { return null; }
+        @Override public Object serviceLookup(ServiceTemplate tmpl) throws RemoteException { return lookup(tmpl); }
         @Override public net.jini.core.discovery.LookupLocator getLocator() throws RemoteException { return null; }
         @Override public String[] getGroups() throws RemoteException { return null; }
     }

@@ -10,7 +10,7 @@ import net.jini.space.BasicJavaSpace;
 import java.rmi.RemoteException;
 import java.io.Serializable;
 
-@ExportedService(id = "hello-service", instanceId = "instance-1")
+@ExportedService(id = "hello-service")
 public class HelloServiceImpl implements HelloService, Serializable {
     private final String instanceName;
     private final BasicJavaSpace space = new BasicJavaSpace();

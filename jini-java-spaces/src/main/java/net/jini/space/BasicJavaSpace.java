@@ -31,7 +31,8 @@ import net.jini.entry.UnusableEntriesException;
  * A basic in-memory implementation of the JavaSpace interface.
  * Note: This implementation is for demonstration and local use.
  */
-public class BasicJavaSpace implements JavaSpace05, Remote {
+public class BasicJavaSpace implements JavaSpace05, Remote, Serializable {
+    private static final long serialVersionUID = 1L;
 
     private final List<SpaceEntry> entries = new CopyOnWriteArrayList<>();
     private final List<Registration> notifications = new CopyOnWriteArrayList<>();
@@ -56,7 +57,7 @@ public class BasicJavaSpace implements JavaSpace05, Remote {
         }
     }
 
-    private PersistenceStore store;
+    private transient PersistenceStore store;
     private long eventSequence = 0;
 
     public static class TestEntry implements net.jini.core.entry.Entry {
@@ -81,7 +82,8 @@ public class BasicJavaSpace implements JavaSpace05, Remote {
         }
     }
 
-    private static class SpaceEntry {
+    private static class SpaceEntry implements Serializable {
+        private static final long serialVersionUID = 1L;
         final Entry entry;
         volatile long expiration;
         final UUID id;
@@ -102,12 +104,14 @@ public class BasicJavaSpace implements JavaSpace05, Remote {
         }
     }
 
-    private static class TransactionState {
+    private static class TransactionState implements Serializable {
+        private static final long serialVersionUID = 1L;
         final List<SpaceEntry> writes = new ArrayList<>();
         final List<SpaceEntry> takes = new ArrayList<>();
     }
 
-    private static class Registration {
+    private static class Registration implements Serializable {
+        private static final long serialVersionUID = 1L;
         final Entry tmpl;
         final RemoteEventListener listener;
         volatile long expiration;

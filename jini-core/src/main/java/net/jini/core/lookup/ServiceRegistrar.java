@@ -21,6 +21,7 @@ public interface ServiceRegistrar extends Serializable {
     ServiceRegistration register(ServiceItem item, long leaseDuration) throws RemoteException;
     Object lookup(ServiceTemplate tmpl) throws RemoteException;
     ServiceMatches lookup(ServiceTemplate tmpl, int maxMatches) throws RemoteException;
+    Object serviceLookup(ServiceTemplate tmpl) throws RemoteException;
 
     EventRegistration notify(ServiceTemplate tmpl,
                              int transitions,

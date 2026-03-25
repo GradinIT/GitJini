@@ -39,27 +39,24 @@ public class ServiceExporter {
             }
             
             ServiceID serviceID;
+            String instanceId = annotation.instanceId();
             if (annotation.id().isEmpty()) {
                 serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
             } else {
                 String compositeId = annotation.id();
-                if (!annotation.instanceId().isEmpty()) {
-                    compositeId += ":" + annotation.instanceId();
+                if (!instanceId.isEmpty()) {
+                    compositeId += ":" + instanceId;
+                    UUID uuid = UUID.nameUUIDFromBytes(compositeId.getBytes());
+                    serviceID = new ServiceID(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 } else {
-                    // Fallback to random to avoid collision if id is provided but instanceId is not
-                    // and multiple instances are started.
-                    // Or we could use host/pid here. 
-                    // Let's stick to the composite id if instanceId is present.
+                    // Let LUS generate ServiceID or use random to avoid collisions
+                    serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
                 }
-                UUID uuid = UUID.nameUUIDFromBytes(compositeId.getBytes());
-                serviceID = new ServiceID(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
             }
             
             List<Entry> attributes = new ArrayList<>();
-            // Use the instanceId from @ExportedService as the routing value by default if present
-            if (!annotation.instanceId().isEmpty()) {
-                attributes.add(new RoutingEntry(annotation.instanceId()));
-            }
+            // Always add a RoutingEntry, use the instanceId from @ExportedService if present
+            attributes.add(new RoutingEntry(instanceId.isEmpty() ? null : instanceId));
             
             ServiceItem item = new ServiceItem(serviceID, service, attributes.toArray(new Entry[0]));
             

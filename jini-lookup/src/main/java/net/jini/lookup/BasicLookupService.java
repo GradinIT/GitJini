@@ -18,14 +18,45 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class BasicLookupService implements ServiceRegistrar {
     private final Map<ServiceID, ServiceItem> services = new ConcurrentHashMap<>();
+    private final Map<ServiceID, BasicLease> leases = new ConcurrentHashMap<>();
 
     @Override
     public ServiceRegistration register(ServiceItem item, long leaseDuration) throws RemoteException {
         if (item.serviceID == null) {
             item.serviceID = new ServiceID(UUID.randomUUID().getMostSignificantBits(), UUID.randomUUID().getLeastSignificantBits());
         }
+        
+        // Dynamic instanceId generation for RoutingEntry
+        if (item.attributeSets != null) {
+            for (Entry attr : item.attributeSets) {
+                if (attr instanceof net.jini.core.entry.RoutingEntry) {
+                    net.jini.core.entry.RoutingEntry re = (net.jini.core.entry.RoutingEntry) attr;
+                    if (re.routingKey == null || re.routingKey.isEmpty()) {
+                        // Count existing instances of the same service type
+                        int count = 0;
+                        String serviceClass = item.service.getClass().getName();
+                        for (ServiceItem existing : services.values()) {
+                            if (existing.service.getClass().getName().equals(serviceClass)) {
+                                count++;
+                            }
+                        }
+                        re.routingKey = "instance-" + (count + 1);
+                        System.out.println("[LUS] Assigned dynamic instanceId: " + re.routingKey + " to " + serviceClass);
+                    }
+                }
+            }
+        }
+        
         services.put(item.serviceID, item);
-        return new BasicServiceRegistration(item.serviceID, this);
+        BasicLease lease = new BasicLease(item.serviceID, this, System.currentTimeMillis() + leaseDuration);
+        leases.put(item.serviceID, lease);
+        return new BasicServiceRegistration(item.serviceID, lease, this);
+    }
+
+    public void cancelLease(ServiceID serviceID) {
+        services.remove(serviceID);
+        leases.remove(serviceID);
+        System.out.println("[LUS] Unregistered service with ID: " + serviceID);
     }
 
     @Override
@@ -38,15 +69,32 @@ public class BasicLookupService implements ServiceRegistrar {
     }
 
     @Override
+    public Object serviceLookup(ServiceTemplate tmpl) throws RemoteException {
+        ServiceMatches matches = lookup(tmpl, 1);
+        if (matches.items.length > 0) {
+            Object service = matches.items[0].service;
+            // For simulation, we return a RemoteServiceProxy if it's not local
+            // But BasicLookupService doesn't know about containers.
+            // However, if we are in LUS, we should probably return a proxy that points to the container where the service is.
+            // For now, let's just return the service and see.
+            return service;
+        }
+        return null;
+    }
+
+    @Override
     public ServiceMatches lookup(ServiceTemplate tmpl, int maxMatches) throws RemoteException {
         List<ServiceItem> matchedItems = new ArrayList<>();
+        int totalMatchesCount = 0;
         for (ServiceItem item : services.values()) {
             if (matches(item, tmpl)) {
-                matchedItems.add(item);
+                totalMatchesCount++;
+                if (matchedItems.size() < maxMatches) {
+                    matchedItems.add(item);
+                }
             }
-            if (matchedItems.size() >= maxMatches) break;
         }
-        return new ServiceMatches(matchedItems.toArray(new ServiceItem[0]), services.size());
+        return new ServiceMatches(matchedItems.toArray(new ServiceItem[0]), totalMatchesCount);
     }
 
     private boolean matches(ServiceItem item, ServiceTemplate tmpl) {
@@ -175,19 +223,44 @@ public class BasicLookupService implements ServiceRegistrar {
         return new String[] { "" }; // Default group
     }
 
-    private static class BasicServiceRegistration implements ServiceRegistration {
+    private static class BasicServiceRegistration implements ServiceRegistration, java.io.Serializable {
+        private static final long serialVersionUID = 1L;
         private final ServiceID serviceID;
-        private final BasicLookupService lus;
+        private final Lease lease;
+        private final transient BasicLookupService lus;
 
-        public BasicServiceRegistration(ServiceID serviceID, BasicLookupService lus) {
+        public BasicServiceRegistration(ServiceID serviceID, Lease lease, BasicLookupService lus) {
             this.serviceID = serviceID;
+            this.lease = lease;
             this.lus = lus;
         }
 
         @Override public ServiceID getServiceID() { return serviceID; }
-        @Override public Lease getLease() { return null; }
+        @Override public Lease getLease() { return lease; }
         @Override public void setAttributes(Entry[] attrSets) throws UnknownLeaseException, RemoteException {}
         @Override public void addAttributes(Entry[] attrSets) throws UnknownLeaseException, RemoteException {}
         @Override public void modifyAttributes(Entry[] attrSetTemplates, Entry[] attrSets) throws UnknownLeaseException, RemoteException {}
+    }
+
+    private static class BasicLease implements Lease {
+        private static final long serialVersionUID = 1L;
+        private final ServiceID serviceID;
+        private final transient BasicLookupService lus;
+        private long expiration;
+
+        public BasicLease(ServiceID serviceID, BasicLookupService lus, long expiration) {
+            this.serviceID = serviceID;
+            this.lus = lus;
+            this.expiration = expiration;
+        }
+
+        @Override public long getExpiration() { return expiration; }
+        @Override public void renew(long duration) { this.expiration = System.currentTimeMillis() + duration; }
+        @Override
+        public void cancel() {
+            if (lus != null) {
+                lus.cancelLease(serviceID);
+            }
+        }
     }
 }

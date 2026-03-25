@@ -81,7 +81,8 @@ public class ServiceImporter {
         }
 
         // Otherwise, discover all available instances and pick one based on hash
-        ServiceTemplate allTmpl = new ServiceTemplate(null, new Class[]{serviceType}, new Entry[]{new RoutingEntry(null)});
+        // Use a wildcard template
+        ServiceTemplate allTmpl = new ServiceTemplate(null, new Class[]{serviceType}, null);
         ServiceMatches matches = registrar.lookup(allTmpl, 100);
         
         if (matches.items.length == 0) {
@@ -104,7 +105,7 @@ public class ServiceImporter {
         }
 
         if (availableKeys.isEmpty()) {
-            return routingKey;
+            return null; // No instances with routing keys found
         }
 
         // Sort for deterministic selection

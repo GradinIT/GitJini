@@ -1,0 +1,40 @@
+services:
+  lus:
+    build:
+      context: ./jini-example
+      dockerfile: Dockerfile
+    command: ["lus"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=0.0.0.0 -Dlus.port=1099
+    ports:
+      - "1099:1099"
+    networks:
+      - jini-network
+
+  service:
+    build:
+      context: ./jini-example
+      dockerfile: Dockerfile
+    command: ["service"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=1099
+    depends_on:
+      - lus
+    networks:
+      - jini-network
+
+  client:
+    build:
+      context: ./jini-example
+      dockerfile: Dockerfile
+    command: ["client"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=1099
+    depends_on:
+      - service
+    networks:
+      - jini-network
+
+networks:
+  jini-network:
+    driver: bridge
