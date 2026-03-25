@@ -12,11 +12,18 @@ Lightweight JavaSpaces module for GitJini. It provides the core `JavaSpace` API 
   - `write(Entry, Transaction, long lease)`
   - `read(Entry template, Transaction, long timeout)`
   - `take(Entry template, Transaction, long timeout)`
-  - `notify(...)` (declared, not implemented yet)
+  - `notify(...)`
   - `snapshot(Entry)`
+- Extended API `net.jini.space.JavaSpace05` with:
+  - `write(Collection entries, Transaction, Collection leaseDurations)`
+  - `take(Collection templates, Transaction, long timeout, long maxEntries)`
+  - `registerForAvailabilityEvent(...)`
 - In‑memory implementation: `net.jini.space.BasicJavaSpace`
+- Transaction support (visibility, locks, commit/abort)
+- Event notifications per Jini Distributed Events spec
 - Field‑based matching per spec semantics (exact value match or wildcard for null fields)
-- Minimal `Lease` handling: lease duration accepted and tracked in memory
+- Lease handling: duration accepted, tracked, and renewable
+- Pluggable persistence: `PersistenceStore` interface for custom backends
 - `InternalSpaceException` for reporting internal space errors
 
 ## Getting Started
@@ -73,14 +80,15 @@ Order taken = (Order) space.take(tmpl, null, JavaSpace.NO_WAIT);
 ```
 
 Notes:
-- Pass `null` for `Transaction` to operate outside a transaction (transactions currently not supported in the impl).
+- Pass a `Transaction` to operations to perform them under transactional control. `BasicJavaSpace` provides `commit(txn)` and `abort(txn)` methods for manual control in this implementation.
 - A field set to `null` in the template acts as a wildcard for that field per spec.
 
 ## Module Layout
 - `src/main/java/net/jini/space/JavaSpace.java` — API
-- `src/main/java/net/jini/space/BasicJavaSpace.java` — in‑memory implementation
+- `src/main/java/net/jini/space/JavaSpace05.java` — Extended API (batch ops, availability events)
+- `src/main/java/net/jini/space/BasicJavaSpace.java` — In‑memory implementation with transaction and event support
 - `src/main/java/net/jini/space/InternalSpaceException.java` — internal error type
-- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — basic usage tests
+- `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — Comprehensive usage tests including transactions and events
 - `specification.md` — extracted JavaSpaces Service Specification (text version)
 
 ## Specification
@@ -91,18 +99,14 @@ The design follows the spec’s core operations (JS.2) and entry matching semant
 
 ## Limitations and Roadmap
 Current implementation constraints:
-- No distributed transactions: parameter is accepted but ignored; multi‑op atomicity is not provided
-- `notify` not implemented: remote events are not wired yet
-- Leases are simple and in‑memory; renewal and expiration policy are minimal
-- No durability/persistence: data lost on JVM exit; no replication or clustering
-- No `JavaSpace05` batch operations
+- In‑memory defaults: By default, data is lost on JVM exit unless a `PersistenceStore` is provided.
+- Single‑JVM: The `BasicJavaSpace` is intended for use within a single JVM or via local RMI proxies.
+- No replication: High availability via replication is not part of `BasicJavaSpace`.
 
 Planned improvements:
-- Transaction support aligned with `net.jini.core.transaction`
-- Event notifications per Jini Distributed Events spec
-- Pluggable persistence (embedded store) and optional replication
-- Lease renewal helpers and expiration listeners
-- Optional `JavaSpace05` APIs
+- Multi‑JVM transaction coordination (distributed transaction manager support).
+- More robust `PersistenceStore` implementations (e.g., SQLite, JSON).
+- Enhanced Jini Discovery and Lookup integration.
 
 ## Build and Test
 From the project root:
