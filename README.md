@@ -1,63 +1,100 @@
-# GitJini Tutorial
+# GitJini: A Simulated Jini & JavaSpaces Environment
 
-Welcome to the GitJini tutorial. This guide explains the core API, the specialized annotations for service discovery, and how the example application demonstrates a "Smart Proxy" with client-side routing.
+GitJini is a simplified, lightweight implementation of the Jini (now Apache River) and JavaSpaces specifications, designed for easy development, testing, and deployment in modern containerized environments like Docker. It supports dynamic service discovery, smart routing, space-based architecture (SBA), and a distributed service grid.
 
-## 1. Core API Classes
+## 1. Core Jini API
 
-The `jini-core` module implements the foundational Jini specifications. Key classes include:
+The `jini-core` module implements the foundational Jini specifications:
 
-- **`ServiceID`**: A 128-bit universally unique identifier (UUID) for a service instance.
-- **`ServiceItem`**: A container for a `ServiceID`, the service object (typically an RMI proxy), and an array of `Entry` attributes.
-- **`ServiceRegistrar`**: The interface for the Lookup Service (LUS). It provides methods to `register` services and `lookup` services based on a `ServiceTemplate`.
-- **`ServiceTemplate`**: Used for searching the LUS. It can filter by `ServiceID`, service types (Java interfaces), and specific `Entry` attributes.
-- **`Entry`**: A marker interface for service attributes. Attributes are used to describe and find services.
-- **`ServiceRegistration`**: Returned when a service registers with an LUS. It contains the `ServiceID` and the `Lease` for the registration.
-- **`Lease`**: Represents a time-bound right to a resource (like a service registration). Services must renew their leases periodically to remain active in the LUS.
+- **`ServiceID`**: A 128-bit UUID for uniquely identifying service instances.
+- **`ServiceItem`**: A container for a `ServiceID`, the service proxy, and an array of `Entry` attributes.
+- **`ServiceRegistrar`**: The interface for the Lookup Service (LUS). Supports `register` for services and `lookup` for discovery via `ServiceTemplate`.
+- **`ServiceTemplate`**: Used for searching the LUS, filtering by ID, Java interfaces, or `Entry` attributes.
+- **`Entry`**: A marker interface for service attributes (e.g., `RoutingEntry`).
+- **`Lease`**: A time-bound right to a resource. Services must renew leases to remain active in the LUS.
 
-## 2. Dynamic Discovery & Routing Annotations
+## 2. Dynamic Discovery & Smart Routing
 
-GitJini introduces several annotations to simplify service export and import, as well as enabling intelligent routing.
+GitJini simplifies service management with annotations and transparent networking:
 
-### `@ExportedService`
-Used on a service implementation class to mark it for automatic registration.
-- **`id`**: (Optional) A base ID for the service.
-- **`instanceId`**: (Optional) A unique ID for the specific instance, which is also used as a `RoutingEntry` attribute.
+### Discovery Annotations
+- **`@ExportedService`**: Marks a class for automatic registration.
+    - `id`: (Optional) Base service ID.
+    - `instanceId`: (Optional) If omitted, the LUS dynamically assigns `instance-N`.
+- **`@ImportService`**: Triggers injection of a **Routing Proxy** into a field.
+- **`@ServiceRouting`**: Marks a field in a request payload to guide the proxy's routing decision.
 
-### `@ImportService`
-Used on a field in a client or another service to trigger automatic injection of a service proxy. In GitJini, this injections a **Routing Proxy** that handles dynamic lookup and routing.
+### Smart Proxy & Client-Side Routing
+The `ServiceImporter` injects a `java.lang.reflect.Proxy` that:
+1.  **Extracts Routing Keys**: Reads `@ServiceRouting` fields from method arguments.
+2.  **Performs Dynamic Lookup**: Queries the LUS for instances matching the routing key (or performs consistent hashing across all matches).
+3.  **Sticky Routing**: Ensures related requests (e.g., same session ID) consistently reach the same instance.
 
-### `@ServiceRouting`
-Used on a field within a request object (payload). When a method is called on an injected proxy, GitJini extracts the value of the field marked with `@ServiceRouting` to determine which service instance should handle the request.
+## 3. Network-Based Discovery (Docker Support)
 
-## 3. The Example Application (`jini-example`)
+When running in a distributed environment (e.g., separate Docker containers), GitJini uses a socket-based **Discovery Server** to bridge isolated JVMs:
+- **LUS Container**: Runs a `DiscoveryService` server on port 1099.
+- **Remote Clients**: Use `LookupLocator` to connect to the LUS container.
+- **Remote Proxy**: The LUS returns a `RemoteServiceRegistrarProxy` that forwards `register` and `lookup` calls over the network.
 
-The example demonstrates a complete flow: starting a Lookup Service, registering multiple service instances, and calling them through a routing proxy.
+## 4. JavaSpaces (Space-Based Architecture)
 
-### Components:
+The `jini-java-spaces` module provides a simple implementation of the `JavaSpace` interface:
+- **`write(entry, txn, lease)`**: Place an entry into the space.
+- **`read(tmpl, txn, timeout)`**: Find a matching entry without removing it.
+- **`take(tmpl, txn, timeout)`**: Find and remove a matching entry.
+- **Transactional Support**: Basic state management for space operations.
+- **Serializable State**: `BasicJavaSpace` is fully serializable, allowing it to be exported as a service to the LUS.
 
-1.  **`HelloService`**: A simple RMI interface with a `sayHello(HelloRequest)` method.
-2.  **`HelloRequest`**: The payload containing a `name` and a `routingKey` field marked with `@ServiceRouting`.
-3.  **`HelloServiceImpl`**: An implementation of `HelloService` annotated with `@ExportedService(instanceId = "instance-1")`.
-4.  **`HelloClient`**: A client class that has a `HelloService` field annotated with `@ImportService`.
+## 5. Jini Service Grid (`jini-grid`)
 
-### Step-by-Step Walkthrough (`JiniExampleApp.java`):
+The grid infrastructure enables automated deployment and management of **Service Units (SU)** across a cluster of **Distributed Service Containers (DSC)**.
 
-1.  **Start Lookup Service**: A `BasicLookupService` is instantiated and registered in the `DiscoveryService`.
-2.  **Create Services**: Two instances of `HelloService` are created with different instance names ("Instance-1" and "Instance-2").
-3.  **Automatic Export**: `ServiceExporter.exportIfNeeded()` is called for both instances. It reads the `@ExportedService` annotation and registers them with the LUS, adding a `RoutingEntry` attribute based on the `instanceId`.
-4.  **Service Injection**: `ServiceImporter.importServices(helloClient, registrar)` is called. It finds the `@ImportService` field in `HelloClient` and injects a dynamic **Routing Proxy**.
-5.  **Routed Calls**:
-    - When `helloClient.callHello("Jocke", "World")` is called, the proxy extracts the routing key "Jocke".
-    - It hashes the key to select one of the available service instances (e.g., "instance-1" or "instance-2").
-    - It then performs a `registrar.lookup()` for a service matching that specific `RoutingEntry`.
-    - Finally, it forwards the call to the discovered instance.
+### Key Components:
+- **Lookup Service (LUS)**: The registry for all grid components and application services.
+- **Distributed Service Manager (DSM)**: The "brain" of the grid. It receives deployment requests and distributes instances across available DSCs.
+- **Distributed Service Container (DSC)**: The execution environment. It hosts one or more Service Unit instances.
 
-## 4. Smart Proxy & Client-Side Routing
+### Service Unit (SU) JAR Structure:
+A deployable SU is packaged as a JAR with the following structure:
+```text
+|----META-INF
+|--------spring
+|------------pu.xml       (Mandatory: Defines beans and services)
+|------------sla.xml      (Optional: Deployment requirements)
+|------------pu.properties (Optional: Property overrides)
+|----com/mycompany/...    (User classes)
+|----lib/                 (Dependencies)
+```
 
-GitJini implements "Smart Proxies" using Java's `java.lang.reflect.Proxy`. 
+### SLA (Service Level Agreement):
+SLA XML (e.g., `sla.xml`) controls the deployment topology:
+- **`number-of-instances`**: Total primary instances to deploy.
+- **`number-of-backups`**: Replicas per primary instance.
+- **Cluster Topologies**: Supports `default`, `partitioned`, `sync-replicated`, and `async-replicated`.
 
-- **Dynamic Lookup**: Instead of holding a static reference to a single service, the proxy performs a lookup on every call (or uses a cached strategy).
-- **Sticky Routing**: By using `@ServiceRouting`, related requests (e.g., for the same user or session) can be consistently routed to the same service instance.
-- **Load Balancing**: If the specific routing key doesn't match an instance directly, the `ServiceImporter` collects all available instances and picks one deterministically based on the hash of the routing key.
+## 6. Deployment & Lifecycle
 
-This architecture ensures high availability and allows for stateful or partitioned service processing within a Jini network.
+The `DeploymentUtility` CLI (or API) provides full lifecycle control:
+
+- **`deploy <su-path> [sla-path]`**: Loads a SU (directory or JAR), parses the SLA, and instructs the DSM to distribute it.
+- **`undeploy <su-name>`**: Removes the service unit from the grid and cancels all LUS leases.
+- **`redeploy <su-name>`**: Performs an atomic undeploy and deploy.
+
+### Example Usage:
+```bash
+# Deploy a Service Unit JAR to the grid
+java -cp ... net.jini.grid.DeploymentUtility deploy my-service.jar
+```
+
+## 7. Running the Project
+
+### Local Monolithic Run:
+Run `JiniExampleApp.main()` to see LUS, Services, and Clients interacting in a single JVM with dynamic ID generation.
+
+### Docker Environment:
+```bash
+# Build and start the LUS, Service, and Client containers
+docker-compose up --build
+```
+The client container will exit once it successfully discovers and calls the service in the remote container.
