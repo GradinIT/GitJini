@@ -16,6 +16,7 @@
         <module>jini-lookup</module>
         <module>jini-event</module>
         <module>jini-example</module>
+        <module>jini-java-spaces</module>
     </modules>
 
     <properties>
