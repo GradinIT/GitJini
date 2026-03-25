@@ -1,10 +1,11 @@
 package net.jini.space;
 
+import java.rmi.Remote;
+import java.rmi.RemoteException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.rmi.MarshalledObject;
-import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -25,13 +26,12 @@ import net.jini.core.lease.UnknownLeaseException;
 import net.jini.core.transaction.Transaction;
 import net.jini.core.transaction.TransactionException;
 import net.jini.entry.UnusableEntriesException;
-import java.rmi.MarshalledObject;
 
 /**
  * A basic in-memory implementation of the JavaSpace interface.
  * Note: This implementation is for demonstration and local use.
  */
-public class BasicJavaSpace implements JavaSpace05 {
+public class BasicJavaSpace implements JavaSpace05, Remote {
 
     private final List<SpaceEntry> entries = new CopyOnWriteArrayList<>();
     private final List<Registration> notifications = new CopyOnWriteArrayList<>();

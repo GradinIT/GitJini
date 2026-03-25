@@ -21,6 +21,7 @@ Lightweight JavaSpaces module for GitJini. It provides the core `JavaSpace` API 
   - `registerForAvailabilityEvent(...)`
 - In‑memory implementation: `net.jini.space.BasicJavaSpace`
 - File-based persistence: `net.jini.space.FilePersistenceStore`, `MongoPersistenceStore`, and `JsonPersistenceStore` for durable storage
+- Replication for High availability: `net.jini.space.ReplicatingJavaSpace` provides primary-backup replication.
 - Jini Lookup integration: `DiscoveryHelper` with automatic discovery support
 - `MatchSet` interface with full leasing, snapshot, and basic live updates support
 - `registerForAvailabilityEvent` support (as a specialized notification)
@@ -47,7 +48,7 @@ Add the module to your project (the root `pom.xml` already includes it as a chil
 This module depends on `jini-core` for `Entry`, `Lease`, and transaction stubs.
 
 ### Define an Entry
-Entries are simple serializable types implementing `net.jini.core.entry.Entry`. Public fields participate in matching.
+Entries are simple serializable types implementing `net.jini.core.entry.Entry`. Public fields (non-primitive, non-static, non-transient, non-final) participate in matching.
 
 ```java
 import net.jini.core.entry.Entry;
@@ -56,6 +57,13 @@ public class Order implements Entry {
     public String id;     // null = wildcard in templates
     public String item;
     public Integer qty;
+
+    public Order() {} // No-arg constructor required
+    public Order(String id, String item, Integer qty) {
+        this.id = id;
+        this.item = item;
+        this.qty = qty;
+    }
 }
 ```
 
@@ -65,30 +73,51 @@ public class Order implements Entry {
 import net.jini.space.BasicJavaSpace;
 import net.jini.space.JavaSpace;
 import net.jini.core.lease.Lease;
+import net.jini.core.transaction.Transaction;
 
+// BasicJavaSpace implements Remote, allowing it to be exported for RMI
 JavaSpace space = new BasicJavaSpace();
 
 // Write an entry with a 1-minute lease
-Order order = new Order();
-order.id = "A-100";
-order.item = "Book";
-order.qty = 2;
+Order order = new Order("A-100", "Book", 2);
 Lease lease = space.write(order, null, 60_000);
 
 // Read with a template (wildcards via nulls)
 Order tmpl = new Order();
-tmpl.id = "A-100";   // match specific id
+tmpl.id = "A-100";   // match specific id, other fields are null (wildcards)
 Order found = (Order) space.read(tmpl, null, JavaSpace.NO_WAIT);
 
 // Take (removes the matching entry)
 Order taken = (Order) space.take(tmpl, null, JavaSpace.NO_WAIT);
 ```
 
+### Use Transactions
+`BasicJavaSpace` supports transactions to ensure ACID properties across multiple operations.
+
+```java
+import net.jini.core.transaction.Transaction;
+import net.jini.core.transaction.TransactionException;
+
+// In a real Jini environment, you would obtain a Transaction from a TransactionManager.
+Transaction txn = null; // Obtain via TransactionManager
+try {
+    space.write(order1, txn, Lease.FOREVER);
+    space.write(order2, txn, Lease.FOREVER);
+    // txn.commit();
+} catch (Exception e) {
+    // txn.abort();
+}
+```
+
 Notes:
 - Pass a `Transaction` to operations to perform them under transactional control. `BasicJavaSpace` provides `commit(txn)` and `abort(txn)` methods for manual control in this implementation.
 - A field set to `null` in the template acts as a wildcard for that field per spec.
+- All fields in an `Entry` must be objects (use `Integer` instead of `int`).
 
 ### Use Persistence
+
+#### PersistenceStore interface
+Custom storage backends can be implemented by implementing the `BasicJavaSpace.PersistenceStore` interface.
 
 #### FilePersistenceStore
 Simple binary serialization of entries.
@@ -141,6 +170,29 @@ DiscoveryHelper.AutoRegistration autoReg = DiscoveryHelper.beginAutoRegistration
 // autoReg.terminate();
 ```
 
+### High Availability (Replication)
+
+`ReplicatingJavaSpace` allows you to keep two spaces in sync by replicating all state-changing operations (write, take) from a primary space to a backup space. it also provides failover for read operations.
+
+```java
+import net.jini.space.BasicJavaSpace;
+import net.jini.space.ReplicatingJavaSpace;
+
+// BasicJavaSpace and ReplicatingJavaSpace implement Remote, allowing them to be exported as RMI objects
+BasicJavaSpace primary = new BasicJavaSpace();
+BasicJavaSpace backup = new BasicJavaSpace();
+ReplicatingJavaSpace haSpace = new ReplicatingJavaSpace(primary, backup);
+
+// All writes to haSpace are sent to both primary and backup
+haSpace.write(new MyEntry("data"), null, 3600_000);
+
+// If primary fails, haSpace will failover to backup for read operations
+MyEntry template = new MyEntry();
+MyEntry result = (MyEntry) haSpace.read(template, null, 1000);
+```
+
+Note: In a production environment, `primary` and `backup` would typically be remote proxies obtained via Jini Discovery or RMI.
+
 ## Module Layout
 - `src/main/java/net/jini/space/JavaSpace.java` — API
 - `src/main/java/net/jini/space/JavaSpace05.java` — Extended API
@@ -149,11 +201,13 @@ DiscoveryHelper.AutoRegistration autoReg = DiscoveryHelper.beginAutoRegistration
 - `src/main/java/net/jini/space/MongoPersistenceStore.java` — MongoDB-based durable storage
 - `src/main/java/net/jini/space/JsonPersistenceStore.java` — JSON-based durable storage
 - `src/main/java/net/jini/space/DiscoveryHelper.java` — Jini Lookup integration
+- `src/main/java/net/jini/space/ReplicatingJavaSpace.java` — Primary-backup replication implementation
 - `src/main/java/net/jini/space/InternalSpaceException.java` — internal error type
 - `src/main/java/net/jini/space/MatchSet.java` — interface for batch read results
 - `src/main/java/net/jini/entry/UnusableEntriesException.java` — error type for batch operations
 - `src/test/java/net/jini/space/BasicJavaSpaceTest.java` — API and logic tests
 - `src/test/java/net/jini/space/FilePersistenceTest.java` — Durability tests
+- `src/test/java/net/jini/space/ReplicationTest.java` — Replication and failover tests
 - `specification.md` — extracted JavaSpaces Service Specification
 
 ## Specification
@@ -162,11 +216,9 @@ DiscoveryHelper.AutoRegistration autoReg = DiscoveryHelper.beginAutoRegistration
 
 ## Limitations and Roadmap
 Current implementation constraints:
-- Single‑JVM: The `BasicJavaSpace` is intended for use within a single JVM or via local RMI proxies.
-- No replication: High availability via replication is not part of `BasicJavaSpace`.
+- Single‑JVM focus: While `Remote` interfaces are present, high-level cluster management is manual.
 
 Planned improvements:
-- Replication for High availability.
 - Lease renewal management in `AutoRegistration`.
 
 ## Build and Test
