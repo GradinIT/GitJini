@@ -23,6 +23,7 @@ public class ReplicatingJavaSpace implements JavaSpace05, Remote {
 
     private final JavaSpace05 primary;
     private final JavaSpace05 backup;
+    private final boolean isBackup;
 
     /**
      * Creates a new ReplicatingJavaSpace.
@@ -31,18 +32,29 @@ public class ReplicatingJavaSpace implements JavaSpace05, Remote {
      * @param backup the backup space where operations are replicated
      */
     public ReplicatingJavaSpace(JavaSpace05 primary, JavaSpace05 backup) {
+        this(primary, backup, false);
+    }
+
+    public ReplicatingJavaSpace(JavaSpace05 primary, JavaSpace05 backup, boolean isBackup) {
         this.primary = primary;
         this.backup = backup;
+        this.isBackup = isBackup;
     }
 
     @Override
     public Lease write(Entry e, Transaction txn, long lease) throws RemoteException, TransactionException {
+        if (isBackup) {
+            System.err.println("[Replication] Blocking direct write to backup instance.");
+            throw new RemoteException("Cannot write directly to a backup space instance.");
+        }
         Lease primaryLease = primary.write(e, txn, lease);
-        try {
-            backup.write(e, txn, lease);
-        } catch (Exception ex) {
-            // Log replication failure but proceed as primary succeeded
-            System.err.println("[Replication] Failed to replicate write to backup: " + ex.getMessage());
+        if (backup != null) {
+            try {
+                backup.write(e, txn, lease);
+            } catch (Exception ex) {
+                // Log replication failure but proceed as primary succeeded
+                System.err.println("[Replication] Failed to replicate write to backup: " + ex.getMessage());
+            }
         }
         return primaryLease;
     }

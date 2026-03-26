@@ -30,6 +30,10 @@ public class SpaceFinder {
         }
     }
 
+    public static Object createPartitionedProxy(JavaSpace05[] partitions) {
+        return new PartitionedJavaSpace(partitions);
+    }
+
     private static Object findEmbedded(String url) throws Exception {
         // format: /./spaceName?params
         String path = url.substring(3);
@@ -37,9 +41,45 @@ public class SpaceFinder {
         String spaceName = queryIdx == -1 ? path : path.substring(0, queryIdx);
         Map<String, String> params = parseQueryParams(queryIdx == -1 ? "" : path.substring(queryIdx + 1));
 
-        // For this simulation, we'll just return a BasicJavaSpace
-        // In a real system, we might look up in a local registry or create it
-        return new BasicJavaSpace();
+        BasicJavaSpace localSpace = new BasicJavaSpace();
+        
+        // Check for clustering parameters
+        if (params.containsKey("total_members")) {
+            return createClusteredProxy(localSpace, spaceName, params);
+        }
+
+        return localSpace;
+    }
+
+    private static Object createClusteredProxy(JavaSpace05 localSpace, String spaceName, Map<String, String> params) throws Exception {
+        String totalMembersStr = params.get("total_members");
+        String[] parts = totalMembersStr.split(",");
+        int primaries = Integer.parseInt(parts[0]);
+        int backups = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        
+        int id = Integer.parseInt(params.getOrDefault("id", "1"));
+        int backupId = Integer.parseInt(params.getOrDefault("backup_id", "0"));
+
+        if (backups > 0) {
+            // Find our partner (if we are primary, find backup; if we are backup, find primary)
+            // For simulation, we'll assume we can find it via LUS
+            JavaSpace05 partner = null;
+            try {
+                String partnerUrl;
+                if (backupId == 0) {
+                    // We are primary, find backup 1
+                    partnerUrl = "jini://localhost:1099/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=1";
+                } else {
+                    // We are backup, find primary
+                    partnerUrl = "jini://localhost:1099/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=0";
+                }
+                // partner = (JavaSpace05) find(partnerUrl); // This would cause infinite recursion or long wait
+            } catch (Exception ignored) {}
+
+            return new ReplicatingJavaSpace(localSpace, partner, backupId > 0);
+        }
+        
+        return localSpace;
     }
 
     private static Object findRemote(String url) throws Exception {

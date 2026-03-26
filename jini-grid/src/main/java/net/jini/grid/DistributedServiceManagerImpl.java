@@ -46,7 +46,31 @@ public class DistributedServiceManagerImpl implements DistributedServiceManager 
         if (dsc == null) {
             throw new RemoteException("No available DSC found to deploy " + name);
         }
-        dsc.deploy(unit);
+        
+        // Add a small delay between concurrent deployments to avoid Discovery Server congestion in simulation
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        // Pass instance/backup info via Space URL if it's an embedded space
+        if (unit.hasEmbeddedSpace()) {
+            SLA sla = unit.getSla();
+            String totalMembers = sla.getNumberOfInstances() + "," + sla.getNumberOfBackups();
+            String baseUrl = unit.getSpaceUrl();
+            if (baseUrl == null) baseUrl = "/./" + unit.getName();
+            
+            String separator = baseUrl.contains("?") ? "&" : "?";
+            String clusteredUrl = baseUrl + separator + "total_members=" + totalMembers + "&id=" + (instanceId + 1) + "&backup_id=" + backupId;
+            
+            // Create a copy of the unit with the specialized URL
+            ServiceUnit specializedUnit = new ServiceUnit(unit.getName(), unit.getServices(), unit.getSla(), unit.hasEmbeddedSpace());
+            specializedUnit.setSpaceUrl(clusteredUrl);
+            dsc.deploy(specializedUnit);
+        } else {
+            dsc.deploy(unit);
+        }
     }
 
     @Override

@@ -36,65 +36,68 @@ public class DiscoveryService {
                 while (true) {
                     ServerSocket ss = serverSocket;
                     if (ss == null || ss.isClosed()) break;
-                    try (Socket socket = ss.accept();
-                         ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
-                         ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
-                        
-                        String command = (String) ois.readObject();
-                        
-                        // Handle the fact that registry might contain 0.0.0.0 or actual host
-                        ServiceRegistrar registrar = registry.get("0.0.0.0:" + port);
-                        if (registrar == null) {
-                            // Fallback to any host with the given port
-                            for (Map.Entry<String, ServiceRegistrar> entry : registry.entrySet()) {
-                                if (entry.getKey().endsWith(":" + port)) {
-                                    registrar = entry.getValue();
-                                    break;
+                    try {
+                        final Socket socket = ss.accept();
+                        new Thread(() -> {
+                            try (socket;
+                                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+                                 ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
+                                
+                                String command = (String) ois.readObject();
+                                
+                                // Handle the fact that registry might contain 0.0.0.0 or actual host
+                                ServiceRegistrar registrar = registry.get("0.0.0.0:" + port);
+                                if (registrar == null) {
+                                    // Fallback to any host with the given port
+                                    for (Map.Entry<String, ServiceRegistrar> entry : registry.entrySet()) {
+                                        if (entry.getKey().endsWith(":" + port)) {
+                                            registrar = entry.getValue();
+                                            break;
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        
-                        if (registrar == null) {
-                            oos.writeObject(null);
-                        } else if ("GET_REGISTRAR".equals(command)) {
-                            // Return a remote proxy if we are being called remotely
-                            String clientAddress = socket.getInetAddress().getHostAddress();
-                            if (clientAddress.equals("127.0.0.1") || clientAddress.equals("0.0.0.0")) {
-                                oos.writeObject(registrar);
-                            } else {
-                                // For remote clients, return a proxy that points back to us
-                                // We use the host as defined in system properties
-                                String host = System.getProperty("lus.host", "localhost");
-                                // If lus.host is 0.0.0.0, we should probably use the hostname "lus" or similar
-                                // But in docker-compose it is set to 0.0.0.0 for LUS, and "lus" for others.
-                                if ("0.0.0.0".equals(host)) {
-                                    host = "lus"; 
+                                
+                                if (registrar == null) {
+                                    oos.writeObject(null);
+                                } else if ("GET_REGISTRAR".equals(command)) {
+                                    // Return a remote proxy if we are being called remotely
+                                    String clientAddress = socket.getInetAddress().getHostAddress();
+                                    if (clientAddress.equals("127.0.0.1") || clientAddress.equals("0.0.0.0")) {
+                                        oos.writeObject(registrar);
+                                    } else {
+                                        // For remote clients, return a proxy that points back to us
+                                        String host = System.getProperty("lus.host", "localhost");
+                                        if ("0.0.0.0".equals(host)) {
+                                            host = "lus"; 
+                                        }
+                                        oos.writeObject(new RemoteServiceRegistrarProxy(host, port));
+                                    }
+                                } else if ("REGISTER".equals(command)) {
+                                    ServiceItem item = (ServiceItem) ois.readObject();
+                                    long duration = ois.readLong();
+                                    oos.writeObject(registrar.register(item, duration));
+                                } else if ("LOOKUP".equals(command)) {
+                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                    oos.writeObject(registrar.lookup(tmpl));
+                                } else if ("SERVICE_LOOKUP".equals(command)) {
+                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                    oos.writeObject(registrar.serviceLookup(tmpl));
+                                } else if ("LOOKUP_MULTI".equals(command)) {
+                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                    Object next = ois.readObject();
+                                    int maxMatches;
+                                    if (next instanceof Integer) {
+                                        maxMatches = (Integer) next;
+                                    } else {
+                                        maxMatches = 1; 
+                                    }
+                                    oos.writeObject(registrar.lookup(tmpl, maxMatches));
                                 }
-                                oos.writeObject(new RemoteServiceRegistrarProxy(host, port));
+                                oos.flush();
+                            } catch (Exception e) {
+                                // Silence
                             }
-                        } else if ("REGISTER".equals(command)) {
-                            ServiceItem item = (ServiceItem) ois.readObject();
-                            long duration = ois.readLong();
-                            oos.writeObject(registrar.register(item, duration));
-                        } else if ("LOOKUP".equals(command)) {
-                            ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                            oos.writeObject(registrar.lookup(tmpl));
-                        } else if ("SERVICE_LOOKUP".equals(command)) {
-                            ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                            oos.writeObject(registrar.serviceLookup(tmpl));
-                        } else if ("LOOKUP_MULTI".equals(command)) {
-                            ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                            Object next = ois.readObject();
-                            int maxMatches;
-                            if (next instanceof Integer) {
-                                maxMatches = (Integer) next;
-                            } else {
-                                // Fallback if it's not an Integer (though we expect it to be based on sendRequest)
-                                maxMatches = 1; 
-                            }
-                            oos.writeObject(registrar.lookup(tmpl, maxMatches));
-                        }
-                        oos.flush();
+                        }).start();
                     } catch (Exception e) {
                         ServerSocket ssForCheck = serverSocket;
                         if (ssForCheck != null && !ssForCheck.isClosed()) {
