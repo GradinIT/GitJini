@@ -132,6 +132,16 @@ public class ServiceUnitLoader {
             }
         }
 
+        // Support <os-core:embedded-space id="space" space-name="eventSpace" />
+        NodeList embeddedSpaceList = doc.getElementsByTagNameNS("http://www.openspaces.org/schema/core", "embedded-space");
+        if (embeddedSpaceList.getLength() > 0) {
+            embeddedSpace = true;
+            Element spaceElem = (Element) embeddedSpaceList.item(0);
+            if (spaceElem.hasAttribute("space-name")) {
+                spaceUrl[0] = "/./" + spaceElem.getAttribute("space-name");
+            }
+        }
+
         // Handle EmbeddedSpaceFactoryBean
         NodeList beanList = doc.getElementsByTagName("bean");
         for (int i = 0; i < beanList.getLength(); i++) {

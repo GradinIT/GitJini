@@ -30,6 +30,9 @@ public class DistributedServiceContainerImpl implements DistributedServiceContai
                 Method findMethod = finderClass.getMethod("find", String.class);
                 String url = unit.getSpaceUrl();
                 if (url == null) url = "/./" + unit.getName();
+                
+                System.out.println("[DSC] Exporting Space with URL: " + url);
+                
                 Object space = findMethod.invoke(null, url);
                 ServiceRegistration reg = ServiceExporter.exportIfNeeded(space);
                 if (reg != null) {

@@ -214,7 +214,8 @@ public class DeploymentUtilityTest {
                 "       xmlns:os-core=\"http://www.openspaces.org/schema/core\"\n" +
                 "       xsi:schemaLocation=\"http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd\n" +
                 "                           http://www.openspaces.org/schema/core http://www.openspaces.org/schema/core/openspaces-core.xsd\">\n" +
-                "    <os-core:space id=\"space\" />\n" +
+                "    <os-core:embedded-space id=\"space\" space-name=\"mySpace\" />\n" +
+                "    <os-core:proxy-space id=\"mySpace\" space=\"space\"/>\n" +
                 "</beans>";
 
         String slaXml = "<sla xmlns=\"http://www.openspaces.org/schema/sla\" \n" +
@@ -265,7 +266,8 @@ public class DeploymentUtilityTest {
                 "       xmlns:os-core=\"http://www.openspaces.org/schema/core\"\n" +
                 "       xsi:schemaLocation=\"http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd\n" +
                 "                           http://www.openspaces.org/schema/core http://www.openspaces.org/schema/core/openspaces-core.xsd\">\n" +
-                "    <os-core:space id=\"space\" url=\"/./dockerSpace\" />\n" +
+                "    <os-core:embedded-space id=\"space\" space-name=\"dockerSpace\" />\n" +
+                "    <os-core:proxy-space id=\"dockerSpace\" space=\"space\"/>\n" +
                 "</beans>";
 
         String slaXml = "<sla xmlns=\"http://www.openspaces.org/schema/sla\" \n" +

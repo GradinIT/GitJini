@@ -67,6 +67,14 @@ A deployable SU is packaged as a JAR with the following structure:
 |----lib/                 (Dependencies)
 ```
 
+### pu.xml Embedded Space Configuration:
+The standard way to define an exported embedded space in the `pu.xml`:
+```xml
+<os-core:embedded-space id="space" space-name="eventSpace" />
+<os-core:proxy-space id="eventSpace" space="space"/>
+```
+This defines a local `JavaSpace` instance and an exported proxy that registers with the LUS.
+
 ### SLA (Service Level Agreement):
 SLA XML (e.g., `sla.xml`) controls the deployment topology:
 - **`number-of-instances`**: Total primary instances to deploy.
