@@ -39,9 +39,9 @@ public class DiscoveryService {
                     try {
                         final Socket socket = ss.accept();
                         new Thread(() -> {
-                            try (socket;
-                                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
-                                 ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
+                            try (Socket s = socket;
+                                 ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
+                                 ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream())) {
                                 
                                 String command = (String) ois.readObject();
                                 

@@ -8,15 +8,21 @@
         <artifactId>GitJini</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <properties>
-         <maven.compiler.release>25</maven.compiler.release>
-    </properties>
-    <artifactId>jini-grid</artifactId>
 
+    <artifactId>jini-test</artifactId>
+    <packaging>jar</packaging>
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>se.gtradinit</groupId>
             <artifactId>jini-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-lease</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -31,14 +37,28 @@
         </dependency>
         <dependency>
             <groupId>se.gtradinit</groupId>
+            <artifactId>jini-event</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
             <artifactId>jini-java-spaces</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-grid</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>5.9.1</version>
-            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.9.1</version>
         </dependency>
     </dependencies>
 </project>
