@@ -3,6 +3,7 @@ package net.jini.grid;
 import net.jini.core.export.ExportedService;
 import net.jini.core.lookup.ServiceRegistration;
 import net.jini.export.ServiceExporter;
+import java.io.Serializable;
 import java.lang.reflect.Method;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
@@ -11,9 +12,10 @@ import java.util.List;
 import java.util.Map;
 
 @ExportedService(id = "DSC")
-public class DistributedServiceContainerImpl implements DistributedServiceContainer {
-    private final Map<String, ServiceUnit> deployedUnits = new HashMap<>();
-    private final Map<String, List<ServiceRegistration>> unitRegistrations = new HashMap<>();
+public class DistributedServiceContainerImpl implements DistributedServiceContainer, Serializable {
+    private static final long serialVersionUID = 1L;
+    private final transient Map<String, ServiceUnit> deployedUnits = new HashMap<>();
+    private final transient Map<String, List<ServiceRegistration>> unitRegistrations = new HashMap<>();
 
     @Override
     public void deploy(ServiceUnit unit) throws RemoteException {

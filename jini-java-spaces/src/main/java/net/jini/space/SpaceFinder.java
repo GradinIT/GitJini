@@ -68,10 +68,10 @@ public class SpaceFinder {
                 String partnerUrl;
                 if (backupId == 0) {
                     // We are primary, find backup 1
-                    partnerUrl = "jini://localhost:1099/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=1";
+                    partnerUrl = "jini://localhost:10999/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=1";
                 } else {
                     // We are backup, find primary
-                    partnerUrl = "jini://localhost:1099/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=0";
+                    partnerUrl = "jini://localhost:10999/*/space?total_members=" + totalMembersStr + "&id=" + id + "&backup_id=0";
                 }
                 // partner = (JavaSpace05) find(partnerUrl); // This would cause infinite recursion or long wait
             } catch (Exception ignored) {}

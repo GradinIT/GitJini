@@ -20,6 +20,24 @@
             <artifactId>jini-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-lookup</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

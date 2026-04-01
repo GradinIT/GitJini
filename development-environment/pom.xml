@@ -9,42 +9,10 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>jini-test</artifactId>
-    <packaging>jar</packaging>
-    <properties>
-        <maven.compiler.release>25</maven.compiler.release>
-    </properties>
+    <artifactId>development-environment</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
     <dependencies>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-lease</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-discovery</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-lookup</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-event</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.gtradinit</groupId>
-            <artifactId>jini-java-spaces</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <dependency>
             <groupId>se.gtradinit</groupId>
             <artifactId>jini-grid</artifactId>
@@ -66,14 +34,28 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-example</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>5.9.1</version>
+            <version>5.10.1</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.9.1</version>
+            <version>5.10.1</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <properties>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
 </project>

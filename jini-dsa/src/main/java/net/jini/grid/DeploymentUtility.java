@@ -156,7 +156,7 @@ public class DeploymentUtility {
 
     private static DistributedServiceManager findDSM() throws Exception {
         String host = System.getProperty("lus.host", "localhost");
-        int port = Integer.getInteger("lus.port", 1099);
+        int port = Integer.getInteger("lus.port", 10999);
         
         LookupLocator locator = new LookupLocator(host, port);
         ServiceRegistrar registrar = locator.getRegistrar();

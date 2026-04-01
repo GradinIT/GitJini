@@ -214,7 +214,7 @@ public class BasicLookupService implements ServiceRegistrar {
     @Override
     public LookupLocator getLocator() throws RemoteException {
         String host = System.getProperty("lus.host", "localhost");
-        int port = Integer.getInteger("lus.port", 1099);
+        int port = Integer.getInteger("lus.port", 10999);
         return new LookupLocator(host, port);
     }
 
@@ -242,7 +242,7 @@ public class BasicLookupService implements ServiceRegistrar {
         @Override public void modifyAttributes(Entry[] attrSetTemplates, Entry[] attrSets) throws UnknownLeaseException, RemoteException {}
     }
 
-    private static class BasicLease implements Lease {
+    private static class BasicLease implements Lease, java.io.Serializable {
         private static final long serialVersionUID = 1L;
         private final ServiceID serviceID;
         private final transient BasicLookupService lus;

@@ -9,10 +9,52 @@ import net.jini.core.export.ImportService;
 import net.jini.discovery.DiscoveryService;
 import net.jini.export.ServiceExporter;
 import net.jini.export.ServiceImporter;
+import net.jini.grid.DistributedServiceContainerImpl;
+import net.jini.grid.DistributedServiceManagerImpl;
 import java.rmi.RemoteException;
 import java.util.UUID;
 
 public class JiniExampleApp {
+
+    public void startLUSAndDSM() {
+        try {
+            System.out.println("--- Jini LUS & DSM Combined Starting ---");
+            // 1. Start LUS
+            ServiceRegistrar registrar = new BasicLookupService();
+            String lusHost = System.getProperty("lus.host", "0.0.0.0");
+            int lusPort = Integer.getInteger("lus.port", 10999);
+            System.out.println("[LUS] Starting at " + lusHost + ":" + lusPort);
+            DiscoveryService.register(lusHost, lusPort, registrar);
+            // Also register as localhost for internal DSM to find it without network issues
+            if (!"localhost".equals(lusHost) && !"127.0.0.1".equals(lusHost) && !"0.0.0.0".equals(lusHost)) {
+                DiscoveryService.register("localhost", lusPort, registrar);
+            } else if ("0.0.0.0".equals(lusHost)) {
+                DiscoveryService.register("127.0.0.1", lusPort, registrar);
+                DiscoveryService.register("localhost", lusPort, registrar);
+            }
+            System.out.println("[LUS] Ready.");
+
+            // 2. Start DSM
+            System.out.println("[DSM] Connecting to LUS at " + lusHost + ":" + lusPort);
+            // Force the DSM to use localhost for registration in the combined process
+            System.setProperty("lus.host", "localhost");
+            ServiceRegistration reg = ServiceExporter.exportIfNeeded(new DistributedServiceManagerImpl());
+            if (reg != null) {
+                System.out.println("[DSM] Registered successfully with ID: " + reg.getServiceID());
+            } else {
+                System.err.println("[DSM] Failed to register: registration returned null.");
+            }
+            System.out.println("[DSM] Ready.");
+            
+            // Keep the process alive
+            while (true) {
+                Thread.sleep(60000);
+                System.out.println("[LUS-DSM] Combined services still alive...");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     public void startLUS() {
         try {
@@ -20,15 +62,59 @@ public class JiniExampleApp {
             ServiceRegistrar registrar = new BasicLookupService();
             
             String lusHost = System.getProperty("lus.host", "0.0.0.0");
-            int lusPort = Integer.getInteger("lus.port", 1099);
+            int lusPort = Integer.getInteger("lus.port", 10999);
             
             System.out.println("[LUS] Starting at " + lusHost + ":" + lusPort);
             DiscoveryService.register(lusHost, lusPort, registrar);
             
             // Keep the process alive
             System.out.println("[LUS] Ready and waiting...");
-            Thread.currentThread().join();
+            // Instead of just joining, let's keep it running with a message
+            while (true) {
+                Thread.sleep(60000);
+                System.out.println("[LUS] Still alive...");
+            }
         } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void startDSM() {
+        try {
+            System.out.println("--- Jini Distributed Service Manager (DSM) Starting ---");
+            String lusHost = System.getProperty("lus.host", "localhost");
+            int lusPort = Integer.getInteger("lus.port", 10999);
+            System.out.println("[DSM] Connecting to LUS at " + lusHost + ":" + lusPort);
+            ServiceRegistration reg = ServiceExporter.exportIfNeeded(new DistributedServiceManagerImpl());
+            if (reg != null) {
+                System.out.println("[DSM] Registered successfully with ID: " + reg.getServiceID());
+            } else {
+                System.err.println("[DSM] Failed to register: registration returned null.");
+            }
+            System.out.println("[DSM] Ready.");
+            while(true) Thread.sleep(1000);
+        } catch (Exception e) {
+            System.err.println("[DSM] Fatal error during startup:");
+            e.printStackTrace();
+        }
+    }
+
+    public void startDSC() {
+        try {
+            System.out.println("--- Jini Distributed Service Container (DSC) Starting ---");
+            String lusHost = System.getProperty("lus.host", "localhost");
+            int lusPort = Integer.getInteger("lus.port", 10999);
+            System.out.println("[DSC] Connecting to LUS at " + lusHost + ":" + lusPort);
+            ServiceRegistration reg = ServiceExporter.exportIfNeeded(new DistributedServiceContainerImpl());
+            if (reg != null) {
+                System.out.println("[DSC] Registered successfully with ID: " + reg.getServiceID());
+            } else {
+                System.err.println("[DSC] Failed to register: registration returned null.");
+            }
+            System.out.println("[DSC] Ready.");
+            while(true) Thread.sleep(1000);
+        } catch (Exception e) {
+            System.err.println("[DSC] Fatal error during startup:");
             e.printStackTrace();
         }
     }
@@ -38,7 +124,7 @@ public class JiniExampleApp {
             System.out.println("--- Jini Service Starting ---");
             
             String lusHost = System.getProperty("lus.host", "localhost");
-            int lusPort = Integer.getInteger("lus.port", 1099);
+            int lusPort = Integer.getInteger("lus.port", 10999);
             System.out.println("[SERVICE] Connecting to LUS at " + lusHost + ":" + lusPort);
 
             // Create service instance
@@ -64,7 +150,7 @@ public class JiniExampleApp {
             System.out.println("--- Jini Client Starting ---");
             
             String lusHost = System.getProperty("lus.host", "localhost");
-            int lusPort = Integer.getInteger("lus.port", 1099);
+            int lusPort = Integer.getInteger("lus.port", 10999);
             
             System.out.println("[CLIENT] Connecting to LUS at " + lusHost + ":" + lusPort);
             LookupLocator locator = new LookupLocator(lusHost, lusPort);
@@ -97,7 +183,7 @@ public class JiniExampleApp {
             
             // Register it in the discovery service so it can be found by host/port
             String lusHost = "localhost";
-            int lusPort = 1099;
+            int lusPort = 10999;
             System.setProperty("lus.host", lusHost);
             System.setProperty("lus.port", String.valueOf(lusPort));
             DiscoveryService.register(lusHost, lusPort, registrar);
@@ -143,11 +229,20 @@ public class JiniExampleApp {
     private static void checkDocker() {
         boolean inDocker = new java.io.File("/.dockerenv").exists();
         if (!inDocker) {
-            System.err.println("CRITICAL: This application is configured to run ONLY in a Docker container.");
-            System.err.println("Please use 'docker-compose up' to start the environment.");
-            System.exit(1);
+            // Check if we are running inside an OCI container by other means
+            String cgroup = null;
+            try {
+                cgroup = java.nio.file.Files.readString(java.nio.file.Paths.get("/proc/1/cgroup"));
+            } catch (Exception ignored) {}
+            
+            if (cgroup != null && (cgroup.contains("docker") || cgroup.contains("containerd") || cgroup.contains("kubepods")) || new java.io.File("/run/.containerenv").exists()) {
+                System.out.println("[DOCKER] Container detected via alternate means.");
+            } else {
+                System.out.println("[WARNING] Not running in a Docker container (/.dockerenv not found). Continuing anyway.");
+            }
+        } else {
+            System.out.println("[DOCKER] Running in a Docker container.");
         }
-        System.out.println("[DOCKER] Running in a Docker container.");
     }
 
     public static void main(String[] args) {
@@ -159,6 +254,15 @@ public class JiniExampleApp {
                 case "lus":
                     app.startLUS();
                     break;
+                case "lus-dsm":
+                    app.startLUSAndDSM();
+                    break;
+                case "dsm":
+                    app.startDSM();
+                    break;
+                case "dsc":
+                    app.startDSC();
+                    break;
                 case "service":
                     app.startService();
                     break;
@@ -167,7 +271,7 @@ public class JiniExampleApp {
                     break;
                 default:
                     System.out.println("Unknown command: " + command);
-                    System.out.println("Usage: java -jar jini-example.jar [lus|service|client]");
+                    System.out.println("Usage: java -jar jini-example.jar [lus|dsm|dsc|service|client]");
             }
         } else {
             new JiniExampleApp().run();

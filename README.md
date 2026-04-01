@@ -33,7 +33,7 @@ The `ServiceImporter` injects a `java.lang.reflect.Proxy` that:
 ## 3. Network-Based Discovery (Docker Support)
 
 When running in a distributed environment (e.g., separate Docker containers), GitJini uses a socket-based **Discovery Server** to bridge isolated JVMs:
-- **LUS Container**: Runs a `DiscoveryService` server on port 1099.
+- **LUS Container**: Runs a `DiscoveryService` server on port 10999.
 - **Remote Clients**: Use `LookupLocator` to connect to the LUS container.
 - **Remote Proxy**: The LUS returns a `RemoteServiceRegistrarProxy` that forwards `register` and `lookup` calls over the network.
 

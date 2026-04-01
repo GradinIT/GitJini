@@ -34,6 +34,26 @@
             <artifactId>jini-java-spaces</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-grid</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-dsm</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-dsc</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>se.gtradinit</groupId>
+            <artifactId>jini-dsa</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -6,12 +6,14 @@ import net.jini.core.lookup.ServiceItem;
 import net.jini.core.lookup.ServiceMatches;
 import net.jini.core.lookup.ServiceRegistrar;
 import net.jini.core.lookup.ServiceTemplate;
+import java.io.Serializable;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 
 @ExportedService(id = "DSM")
-public class DistributedServiceManagerImpl implements DistributedServiceManager {
+public class DistributedServiceManagerImpl implements DistributedServiceManager, Serializable {
+    private static final long serialVersionUID = 1L;
 
     @Override
     public void deploy(ServiceUnit unit) throws RemoteException {
@@ -91,7 +93,7 @@ public class DistributedServiceManagerImpl implements DistributedServiceManager 
         deploy(unit);
     }
 
-    private int currentDscIndex = 0;
+    private transient int currentDscIndex = 0;
 
     private synchronized DistributedServiceContainer findAvailableDSC() throws RemoteException {
         List<DistributedServiceContainer> dscs = findAllDSCs();
@@ -106,7 +108,7 @@ public class DistributedServiceManagerImpl implements DistributedServiceManager 
     private List<DistributedServiceContainer> findAllDSCs() throws RemoteException {
         List<DistributedServiceContainer> result = new ArrayList<>();
         String host = System.getProperty("lus.host", "localhost");
-        int port = Integer.getInteger("lus.port", 1099);
+        int port = Integer.getInteger("lus.port", 10999);
         
         try {
             LookupLocator locator = new LookupLocator(host, port);

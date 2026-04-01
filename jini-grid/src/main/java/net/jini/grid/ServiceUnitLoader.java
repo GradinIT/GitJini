@@ -188,7 +188,7 @@ public class ServiceUnitLoader {
         }
 
         if (slaXml.exists()) {
-            return DeploymentUtility.loadSLA(slaXml.getAbsolutePath());
+            return parseSlaFromStream(new java.io.FileInputStream(slaXml));
         }
         return new SLA();
     }

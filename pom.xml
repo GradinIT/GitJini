@@ -18,7 +18,11 @@
         <module>jini-example</module>
         <module>jini-java-spaces</module>
         <module>jini-grid</module>
+        <module>jini-dsm</module>
+        <module>jini-dsc</module>
+        <module>jini-dsa</module>
         <module>jini-test</module>
+        <module>development-environment</module>
     </modules>
     <properties>
         <maven.compiler.release>25</maven.compiler.release>

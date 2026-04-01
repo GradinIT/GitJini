@@ -40,65 +40,112 @@ public class DiscoveryService {
                         final Socket socket = ss.accept();
                         new Thread(() -> {
                             try (Socket s = socket;
-                                 ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
                                  ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream())) {
                                 
-                                String command = (String) ois.readObject();
+                                oos.flush(); // Send header immediately to avoid EOFException on client's new ObjectInputStream
                                 
-                                // Handle the fact that registry might contain 0.0.0.0 or actual host
-                                ServiceRegistrar registrar = registry.get("0.0.0.0:" + port);
-                                if (registrar == null) {
-                                    // Fallback to any host with the given port
-                                    for (Map.Entry<String, ServiceRegistrar> entry : registry.entrySet()) {
-                                        if (entry.getKey().endsWith(":" + port)) {
-                                            registrar = entry.getValue();
-                                            break;
+                                try (ObjectInputStream ois = new ObjectInputStream(s.getInputStream())) {
+                                    Object input = ois.readObject();
+                                    if (!(input instanceof String)) {
+                                        return;
+                                    }
+                                    String command = (String) input;
+                                    System.out.println("[DISCOVERY] Command '" + command + "' received from " + socket.getInetAddress());
+                                    
+                                    // Handle the fact that registry might contain 0.0.0.0 or actual host
+                                    ServiceRegistrar registrar = registry.get("0.0.0.0:" + port);
+                                    if (registrar == null) {
+                                        registrar = registry.get(socket.getLocalAddress().getHostAddress() + ":" + port);
+                                    }
+                                    if (registrar == null) {
+                                        registrar = registry.get("localhost:" + port);
+                                    }
+                                    if (registrar == null) {
+                                        registrar = registry.get("127.0.0.1:" + port);
+                                    }
+                                    if (registrar == null) {
+                                        // Fallback to any host with the given port
+                                        for (Map.Entry<String, ServiceRegistrar> entry : registry.entrySet()) {
+                                            if (entry.getKey().endsWith(":" + port)) {
+                                                registrar = entry.getValue();
+                                                break;
+                                            }
                                         }
                                     }
-                                }
-                                
-                                if (registrar == null) {
-                                    oos.writeObject(null);
-                                } else if ("GET_REGISTRAR".equals(command)) {
-                                    // Return a remote proxy if we are being called remotely
-                                    String clientAddress = socket.getInetAddress().getHostAddress();
-                                    if (clientAddress.equals("127.0.0.1") || clientAddress.equals("0.0.0.0")) {
-                                        oos.writeObject(registrar);
-                                    } else {
-                                        // For remote clients, return a proxy that points back to us
-                                        String host = System.getProperty("lus.host", "localhost");
-                                        if ("0.0.0.0".equals(host)) {
-                                            host = "lus"; 
+                                    
+                                    if (registrar == null) {
+                                        System.out.println("[DISCOVERY] Command '" + command + "' received but no registrar found for port " + port + ". Registry keys: " + registry.keySet());
+                                        oos.writeObject(null);
+                                    } else if ("GET_REGISTRAR".equals(command)) {
+                                        // Return a remote proxy if we are being called remotely
+                                        String clientAddress = socket.getInetAddress().getHostAddress();
+                                        if (clientAddress.equals("127.0.0.1") || clientAddress.equals("0.0.0.0") || "localhost".equals(clientAddress)) {
+                                            System.out.println("[DISCOVERY] Serving GET_REGISTRAR locally to " + clientAddress);
+                                            oos.writeObject(registrar);
+                                        } else {
+                                            // For remote clients, return a proxy that points back to us.
+                                            // In Docker/cloud environments, we might need to use a public address.
+                                            String proxyHost = System.getProperty("discovery.proxy.host");
+                                            if (proxyHost == null) {
+                                                // If we're inside Docker, we probably want to use the hostname we're listening on.
+                                                // If that's 0.0.0.0, it's not helpful.
+                                                proxyHost = System.getProperty("lus.host", "localhost");
+                                                if ("0.0.0.0".equals(proxyHost)) {
+                                                    // Fallback to what we are actually listening on if available, or localhost.
+                                                    proxyHost = socket.getLocalAddress().getHostName();
+                                                    if ("0.0.0.0".equals(proxyHost) || "localhost".equals(proxyHost) || "127.0.0.1".equals(proxyHost)) {
+                                                        proxyHost = "localhost";
+                                                    }
+                                                }
+                                            }
+                                            System.out.println("[DISCOVERY] Serving GET_REGISTRAR remotely to " + clientAddress + " using proxyHost=" + proxyHost);
+                                            oos.writeObject(new RemoteServiceRegistrarProxy(proxyHost, port));
                                         }
-                                        oos.writeObject(new RemoteServiceRegistrarProxy(host, port));
+                                    } else if ("REGISTER".equals(command)) {
+                                        try {
+                                            ServiceItem item = (ServiceItem) ois.readObject();
+                                            Object next = ois.readObject();
+                                            long duration = 0;
+                                            if (next instanceof Long) {
+                                                duration = (Long) next;
+                                            }
+                                            ServiceRegistration reg = registrar.register(item, duration);
+                                            oos.writeObject(reg);
+                                        } catch (NotSerializableException nse) {
+                                            System.err.println("[DISCOVERY] NotSerializableException during REGISTER: " + nse.getMessage());
+                                            nse.printStackTrace();
+                                            throw nse;
+                                        }
+                                    } else if ("LOOKUP".equals(command)) {
+                                        ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                        Object result = registrar.lookup(tmpl);
+                                        System.out.println("[DISCOVERY] LOOKUP called from " + socket.getInetAddress() + " with types " + (tmpl.serviceTypes != null && tmpl.serviceTypes.length > 0 ? tmpl.serviceTypes[0].getName() : "null") + ". Found: " + (result != null));
+                                        oos.writeObject(result);
+                                    } else if ("SERVICE_LOOKUP".equals(command)) {
+                                        ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                        Object result = registrar.serviceLookup(tmpl);
+                                        System.out.println("[DISCOVERY] SERVICE_LOOKUP called from " + socket.getInetAddress() + " with types " + (tmpl.serviceTypes != null && tmpl.serviceTypes.length > 0 ? tmpl.serviceTypes[0].getName() : "null") + ". Found: " + (result != null));
+                                        oos.writeObject(result);
+                                    } else if ("LOOKUP_MULTI".equals(command)) {
+                                        ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
+                                        Object next = ois.readObject();
+                                        int maxMatches = 1;
+                                        if (next instanceof Integer) {
+                                            maxMatches = (Integer) next;
+                                        }
+                                        ServiceMatches matches = registrar.lookup(tmpl, maxMatches);
+                                        System.out.println("[DISCOVERY] LOOKUP_MULTI called from " + socket.getInetAddress() + " with types " + (tmpl.serviceTypes != null && tmpl.serviceTypes.length > 0 ? tmpl.serviceTypes[0].getName() : "null") + ". Found " + (matches != null ? matches.totalMatches : 0) + " matches.");
+                                        oos.writeObject(matches);
                                     }
-                                } else if ("REGISTER".equals(command)) {
-                                    ServiceItem item = (ServiceItem) ois.readObject();
-                                    long duration = ois.readLong();
-                                    oos.writeObject(registrar.register(item, duration));
-                                } else if ("LOOKUP".equals(command)) {
-                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                                    oos.writeObject(registrar.lookup(tmpl));
-                                } else if ("SERVICE_LOOKUP".equals(command)) {
-                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                                    oos.writeObject(registrar.serviceLookup(tmpl));
-                                } else if ("LOOKUP_MULTI".equals(command)) {
-                                    ServiceTemplate tmpl = (ServiceTemplate) ois.readObject();
-                                    Object next = ois.readObject();
-                                    int maxMatches;
-                                    if (next instanceof Integer) {
-                                        maxMatches = (Integer) next;
-                                    } else {
-                                        maxMatches = 1; 
-                                    }
-                                    oos.writeObject(registrar.lookup(tmpl, maxMatches));
+                                    oos.flush();
+                                } catch (IOException | ClassNotFoundException e) {
+                                    // Connection might be closed or data is invalid
                                 }
-                                oos.flush();
-                            } catch (Exception e) {
-                                // Silence
+                            } catch (IOException e) {
+                                // Connection issue
                             }
                         }).start();
-                    } catch (Exception e) {
+                    } catch (IOException e) {
                         ServerSocket ssForCheck = serverSocket;
                         if (ssForCheck != null && !ssForCheck.isClosed()) {
                             // Silence common socket reset errors during shutdown
@@ -130,22 +177,51 @@ public class DiscoveryService {
     }
 
     public static ServiceRegistrar getRegistrar(String host, int port) {
-        // First check local registry
+        // First check local registry with exact key
         ServiceRegistrar local = registry.get(host + ":" + port);
         if (local != null) return local;
 
+        // Check local registry with common localhost aliases if host is local
+        if ("localhost".equals(host) || "127.0.0.1".equals(host) || "0.0.0.0".equals(host)) {
+            local = registry.get("0.0.0.0:" + port);
+            if (local == null) {
+                local = registry.get("localhost:" + port);
+            }
+            if (local == null) {
+                local = registry.get("127.0.0.1:" + port);
+            }
+            if (local == null) {
+                // Fallback to any host in the registry for this port
+                for (Map.Entry<String, ServiceRegistrar> entry : registry.entrySet()) {
+                    if (entry.getKey().endsWith(":" + port)) {
+                        return entry.getValue();
+                    }
+                }
+            }
+            if (local != null) return local;
+        }
+
         // Then try remote lookup via socket
         try (Socket socket = new Socket(host, port);
-             ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
-             ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+             ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
             
-            socket.setSoTimeout(5000);
-            oos.writeObject("GET_REGISTRAR");
-            oos.flush();
+            oos.flush(); // Send header immediately
             
-            return (ServiceRegistrar) ois.readObject();
-        } catch (Exception e) {
-            System.err.println("[DISCOVERY] Failed to connect to " + host + ":" + port + ": " + e.getMessage());
+            try (ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+                socket.setSoTimeout(5000);
+                
+                oos.writeObject("GET_REGISTRAR");
+                oos.flush();
+                
+                Object result = ois.readObject();
+                return (ServiceRegistrar) result;
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            // Only report failure if we are NOT trying to connect to localhost when nothing is there
+            if (!"localhost".equals(host) && !"127.0.0.1".equals(host)) {
+                System.err.println("[DISCOVERY] Failed to connect to " + host + ":" + port + ": " + e.getMessage());
+                throw new RuntimeException("Failed to connect to " + host + ":" + port, e);
+            }
             return null;
         }
     }
@@ -164,17 +240,19 @@ public class DiscoveryService {
 
         private Object sendRequest(String command, Object... args) throws RemoteException {
             try (Socket socket = new Socket(host, port);
-                 ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
-                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+                 ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
                 
-                oos.writeObject(command);
-                for (Object arg : args) {
-                    if (arg instanceof Integer) oos.writeInt((Integer) arg);
-                    else if (arg instanceof Long) oos.writeLong((Long) arg);
-                    else oos.writeObject(arg);
+                oos.flush(); // Send header immediately
+                
+                try (ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+                    oos.writeObject(command);
+                    oos.flush();
+                    for (Object arg : args) {
+                        oos.writeObject(arg);
+                    }
+                    oos.flush();
+                    return ois.readObject();
                 }
-                oos.flush();
-                return ois.readObject();
             } catch (Exception e) {
                 throw new RemoteException("Failed to forward " + command + " to " + host + ":" + port, e);
             }

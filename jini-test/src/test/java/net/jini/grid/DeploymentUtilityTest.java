@@ -34,7 +34,7 @@ public class DeploymentUtilityTest {
     private DistributedServiceManager dsm;
     private List<DistributedServiceContainer> dscs = new ArrayList<>();
     private final String host = "localhost";
-    private final int port = 1099;
+    private final int port = 10999;
 
     @BeforeEach
     public void setup() throws Exception {
@@ -239,7 +239,7 @@ public class DeploymentUtilityTest {
             foundDsm.deploy(unit);
 
             // 4. Verify in LUS
-            LookupLocator locator = new LookupLocator("localhost", 1099);
+            LookupLocator locator = new LookupLocator("localhost", 10999);
             ServiceRegistrar registrar = locator.getRegistrar();
             ServiceTemplate tmpl = new ServiceTemplate(null, new Class[]{JavaSpace.class}, null);
 
@@ -287,7 +287,7 @@ public class DeploymentUtilityTest {
             DistributedServiceManager foundDsm = findDSM();
             foundDsm.deploy(unit);
 
-            LookupLocator locator = new LookupLocator("localhost", 1099);
+            LookupLocator locator = new LookupLocator("localhost", 10999);
             ServiceRegistrar registrar = locator.getRegistrar();
             ServiceTemplate tmpl = new ServiceTemplate(null, new Class[]{JavaSpace.class}, null);
 

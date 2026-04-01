@@ -24,7 +24,7 @@ docker-compose up --build
 ```
 
 This will start three containers:
-1. `lus`: The Jini Lookup Service, listening on port 1099.
+1. `lus`: The Jini Lookup Service, listening on port 10999.
 2. `service`: A Jini service that automatically registers with the `lus`.
 3. `client`: A Jini client that connects to the `lus`, finds the `service`, and calls it.
 
@@ -53,15 +53,15 @@ If you want to run the JAR manually without Docker:
 
 ### Start LUS
 ```bash
-java -Dlus.host=localhost -Dlus.port=1099 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar lus
+java -Dlus.host=localhost -Dlus.port=10999 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar lus
 ```
 
 ### Start Service
 ```bash
-java -Dlus.host=localhost -Dlus.port=1099 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar service
+java -Dlus.host=localhost -Dlus.port=10999 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar service
 ```
 
 ### Start Client
 ```bash
-java -Dlus.host=localhost -Dlus.port=1099 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar client
+java -Dlus.host=localhost -Dlus.port=10999 -jar jini-example/target/jini-example-1.0-SNAPSHOT.jar client
 ```

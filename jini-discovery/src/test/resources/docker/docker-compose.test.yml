@@ -1,0 +1,13 @@
+services:
+  lus-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.lus
+    ports:
+      - "11099:10999"
+    networks:
+      - jini-test-network
+
+networks:
+  jini-test-network:
+    driver: bridge

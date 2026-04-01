@@ -51,7 +51,7 @@ public class GridManager {
     private static List<DistributedServiceAgent> findAllDSAs() throws Exception {
         List<DistributedServiceAgent> result = new ArrayList<>();
         String host = System.getProperty("lus.host", "localhost");
-        int port = Integer.getInteger("lus.port", 1099);
+        int port = Integer.getInteger("lus.port", 10999);
         
         LookupLocator locator = new LookupLocator(host, port);
         ServiceRegistrar registrar = locator.getRegistrar();

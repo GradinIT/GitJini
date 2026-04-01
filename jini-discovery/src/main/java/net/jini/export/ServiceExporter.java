@@ -39,15 +39,27 @@ public class ServiceExporter {
         }
         
         String host = System.getProperty("lus.host", "localhost");
-        int port = Integer.getInteger("lus.port", 1099);
+        int port = Integer.getInteger("lus.port", 10999);
         
-        System.out.println("[EXPORTER] Exporting service " + serviceClass.getName());
+        System.out.println("[EXPORTER] Exporting service " + serviceClass.getName() + " to " + host + ":" + port);
         
         LookupLocator locator = new LookupLocator(host, port);
-        ServiceRegistrar registrar = locator.getRegistrar();
+        ServiceRegistrar registrar = null;
+        
+        // Retry logic for initial connection to LUS
+        for (int i = 0; i < 20; i++) {
+            try {
+                registrar = locator.getRegistrar();
+                if (registrar != null) break;
+                System.out.println("[EXPORTER] LUS not yet ready at " + host + ":" + port + "... (Attempt " + (i+1) + "/20)");
+            } catch (Exception e) {
+                System.out.println("[EXPORTER] Waiting for Lookup Service at " + host + ":" + port + "... (Attempt " + (i+1) + "/20). Error: " + e.getMessage());
+            }
+            Thread.sleep(5000);
+        }
         
         if (registrar == null) {
-            throw new IllegalStateException("Could not find Lookup Service at " + host + ":" + port);
+            throw new IllegalStateException("Could not find Lookup Service at " + host + ":" + port + " after 20 attempts");
         }
         
         ServiceID serviceID;
@@ -75,7 +87,25 @@ public class ServiceExporter {
         ServiceItem item = new ServiceItem(serviceID, service, attributes.toArray(new Entry[0]));
         
         // Register for 5 minutes by default
-        ServiceRegistration reg = registrar.register(item, 1000 * 60 * 5);
+        ServiceRegistration reg = null;
+        for (int i = 0; i < 5; i++) {
+            try {
+                reg = registrar.register(item, 1000 * 60 * 5);
+                if (reg != null) break;
+                System.out.println("[EXPORTER] Registrar returned null for " + serviceClass.getName() + ", retrying... (Attempt " + (i+1) + "/5)");
+            } catch (Exception e) {
+                System.err.println("[EXPORTER] Registration failed for " + serviceClass.getName() + ": " + e.getMessage() + ", retrying... (Attempt " + (i+1) + "/5)");
+                if (e.getCause() instanceof java.io.NotSerializableException || e instanceof java.io.NotSerializableException) {
+                    e.printStackTrace();
+                }
+            }
+            Thread.sleep(2000);
+        }
+
+        if (reg == null) {
+            throw new IllegalStateException("Could not register service " + serviceClass.getName() + " with the Lookup Service");
+        }
+
         System.out.println("[EXPORTER] Service registered with ID: " + reg.getServiceID());
         return reg;
     }

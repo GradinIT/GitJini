@@ -1,0 +1,89 @@
+services:
+  # Lookup Service
+  lus:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["lus"]
+    environment:
+      - "JAVA_OPTS=-Dlus.host=0.0.0.0 -Dlus.port=10999 -Ddiscovery.proxy.host=172.16.238.10"
+    ports:
+      - "10999:10999"
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.10
+
+  # Distributed Service Manager
+  dsm:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["dsm"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=172.16.238.10 -Dlus.port=10999 -Ddiscovery.proxy.host=172.16.238.11
+    depends_on:
+      - lus
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.11
+
+  # DSCs for primary partitions
+  dsc-primary-1:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["dsc"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=172.16.238.10 -Dlus.port=10999
+    depends_on:
+      - lus
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.21
+
+  dsc-primary-2:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["dsc"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=172.16.238.10 -Dlus.port=10999
+    depends_on:
+      - lus
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.22
+
+  # DSCs for backup partitions
+  dsc-backup-1:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["dsc"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=172.16.238.10 -Dlus.port=10999
+    depends_on:
+      - lus
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.31
+
+  dsc-backup-2:
+    build:
+      context: ../jini-example
+      dockerfile: Dockerfile
+    command: ["dsc"]
+    environment:
+      - JAVA_OPTS=-Dlus.host=172.16.238.10 -Dlus.port=10999
+    depends_on:
+      - lus
+    networks:
+      jini-network:
+        ipv4_address: 172.16.238.32
+
+networks:
+  jini-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.238.0/24

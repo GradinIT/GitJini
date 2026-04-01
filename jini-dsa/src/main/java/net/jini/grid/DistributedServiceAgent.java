@@ -1,9 +1,10 @@
 package net.jini.grid;
 
+import java.io.Serializable;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-public interface DistributedServiceAgent extends Remote {
+public interface DistributedServiceAgent extends Remote, Serializable {
     void startDSM() throws RemoteException;
     void startDSC() throws RemoteException;
     void startLUS() throws RemoteException;

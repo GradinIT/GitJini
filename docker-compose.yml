@@ -5,9 +5,9 @@ services:
       dockerfile: Dockerfile
     command: ["lus"]
     environment:
-      - JAVA_OPTS=-Dlus.host=0.0.0.0 -Dlus.port=1099
+      - JAVA_OPTS=-Dlus.host=0.0.0.0 -Dlus.port=10999
     ports:
-      - "1099:1099"
+      - "10999:10999"
     networks:
       - jini-network
 
@@ -17,7 +17,7 @@ services:
       dockerfile: Dockerfile
     command: ["service"]
     environment:
-      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=1099
+      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=10999
     depends_on:
       - lus
     networks:
@@ -29,7 +29,7 @@ services:
       dockerfile: Dockerfile
     command: ["client"]
     environment:
-      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=1099
+      - JAVA_OPTS=-Dlus.host=lus -Dlus.port=10999
     depends_on:
       - service
     networks:
